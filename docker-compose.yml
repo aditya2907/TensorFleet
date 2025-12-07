@@ -209,7 +209,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MONGODB_URL=mongodb://admin:password123@mongodb:27017/tensorfleet?authSource=admin
+      - MONGODB_URL=mongodb+srv://aditya:k8wcfwhwbFw6ejct@cluster0.poidcg0.mongodb.net/tensorfleet?retryWrites=true&w=majority
       - MONGODB_DB=tensorfleet
     depends_on:
       mongodb:
