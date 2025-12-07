@@ -434,7 +434,7 @@ DEBUG=false
 LOG_LEVEL=warning
 
 # MongoDB (use managed service)
-MONGODB_URL=mongodb+srv://aditya:k8wcfwhwbFw6ejct@cluster0.poidcg0.mongodb.net/tensorfleet?retryWrites=true&w=majority
+MONGODB_URL=mongodb+srv://username:password@cluster.mongodb.net/tensorfleet?retryWrites=true&w=majority
 MONGODB_DB=tensorfleet
 
 # Redis (use managed service)
