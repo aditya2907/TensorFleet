@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package gateway;
+
+option go_package = "github.com/tensorfleet/api-gateway/proto/gateway";
+
+service GatewayService {
+  rpc SubmitJob(JobRequest) returns (JobResponse);
+  rpc GetJobStatus(JobStatusRequest) returns (JobStatusResponse);
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+}
+
+message JobRequest {
+  string user_id = 1;
+  string model_type = 2;
+  string dataset_path = 3;
+  map<string, string> hyperparameters = 4;
+  int32 num_workers = 5;
+  int32 epochs = 6;
+}
+
+message JobResponse {
+  string job_id = 1;
+  string status = 2;
+  string message = 3;
+  int64 created_at = 4;
+}
+
+message JobStatusRequest {
+  string job_id = 1;
+}
+
+message JobStatusResponse {
+  string job_id = 1;
+  string status = 2;
+  int32 progress = 3;
+  string current_epoch = 4;
+  double current_loss = 5;
+  double current_accuracy = 6;
+  string message = 7;
+}
+
+message ListJobsRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListJobsResponse {
+  repeated JobInfo jobs = 1;
+  int32 total = 2;
+}
+
+message JobInfo {
+  string job_id = 1;
+  string user_id = 2;
+  string status = 3;
+  int64 created_at = 4;
+  int64 updated_at = 5;
+}
+
+message CancelJobRequest {
+  string job_id = 1;
+}
+
+message CancelJobResponse {
+  bool success = 1;
+  string message = 2;
+}

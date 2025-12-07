@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: tensorfleet
+  labels:
+    app: worker
+    app.kubernetes.io/part-of: tensorfleet
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+        app.kubernetes.io/part-of: tensorfleet
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "2112"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: worker
+        image: ghcr.io/your-username/tensorfleet/worker:latest
+        ports:
+        - containerPort: 50052
+          name: grpc
+        - containerPort: 2112
+          name: metrics
+        env:
+        - name: PORT
+          value: "50052"
+        - name: ORCHESTRATOR_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: ORCHESTRATOR_ADDR
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worker-hpa
+  namespace: tensorfleet
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-service
+  namespace: tensorfleet
+spec:
+  selector:
+    app: worker
+  ports:
+  - protocol: TCP
+    port: 50052
+    targetPort: 50052
+    name: grpc
+  - protocol: TCP
+    port: 2112
+    targetPort: 2112
+    name: metrics
+  clusterIP: None

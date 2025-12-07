@@ -1,0 +1,255 @@
+services:
+  # MongoDB - for dataset and model storage
+  mongodb:
+    image: mongo:7.0
+    container_name: tensorfleet-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password123
+      - MONGO_INITDB_DATABASE=tensorfleet
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - tensorfleet-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Redis - for orchestrator job metadata
+  redis:
+    image: redis:7-alpine
+    container_name: tensorfleet-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - tensorfleet-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # MinIO - S3-compatible object storage
+  minio:
+    image: minio/minio:latest
+    container_name: tensorfleet-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - tensorfleet-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Orchestrator - coordinates distributed training
+  orchestrator:
+    build:
+      context: .
+      dockerfile: orchestrator/Dockerfile
+    container_name: tensorfleet-orchestrator
+    ports:
+      - "50051:50051"
+    environment:
+      - PORT=50051
+      - REDIS_ADDR=redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - tensorfleet-net
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z localhost 50051 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Worker nodes - execute ML training tasks
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    deploy:
+      replicas: 3
+    environment:
+      - PORT=50052
+      - ORCHESTRATOR_ADDR=orchestrator:50051
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    networks:
+      - tensorfleet-net
+
+  # API Gateway - REST API for clients
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: tensorfleet-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ORCHESTRATOR_ADDR=orchestrator:50051
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    networks:
+      - tensorfleet-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Storage service - file upload/download
+  storage:
+    build: ./storage
+    container_name: tensorfleet-storage
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=false
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - tensorfleet-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Monitoring service - metrics and health
+  monitoring:
+    build: ./monitoring
+    container_name: tensorfleet-monitoring
+    ports:
+      - "8082:8082"
+    environment:
+      - PORT=8082
+    networks:
+      - tensorfleet-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Frontend - Web UI
+  frontend:
+    build: ./frontend
+    container_name: tensorfleet-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+      - monitoring
+    networks:
+      - tensorfleet-net
+    environment:
+      - VITE_API_URL=http://localhost:8080
+      - VITE_MONITORING_URL=http://localhost:8082
+
+  # Prometheus - metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: tensorfleet-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - tensorfleet-net
+
+  # Grafana - metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: tensorfleet-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - tensorfleet-net
+
+  # ML Worker - machine learning training with MongoDB
+  worker-ml:
+    build: ./worker-ml
+    container_name: tensorfleet-worker-ml
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URL=mongodb://admin:password123@mongodb:27017/tensorfleet?authSource=admin
+      - MONGODB_DB=tensorfleet
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - tensorfleet-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Model Service - model management and downloads
+  model-service:
+    build: ./model-service
+    container_name: tensorfleet-model-service
+    ports:
+      - "8083:8083"
+    environment:
+      - PORT=8083
+      - MONGODB_URL=mongodb://admin:password123@mongodb:27017/tensorfleet?authSource=admin
+      - MONGODB_DB=tensorfleet
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - tensorfleet-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  minio_data:
+  prometheus_data:
+  grafana_data:
+  mongodb_data:
+  mongodb_config:
+
+networks:
+  tensorfleet-net:
+    driver: bridge

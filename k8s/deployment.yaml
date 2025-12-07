@@ -1,0 +1,187 @@
+# Namespace for all DistML resources
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: distml
+---
+# API Gateway Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: distml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+      - name: api-gateway
+        image: your-repo/api-gateway:latest # Replace with your image
+        ports:
+        - containerPort: 8000
+        env:
+        - name: JOB_ORCHESTRATOR_URL
+          value: "http://job-orchestrator.distml.svc.cluster.local:5000"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: distml-secret
+              key: jwt-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: distml
+spec:
+  selector:
+    app: api-gateway
+  ports:
+  - port: 8000
+    targetPort: 8000
+---
+# Job Orchestrator Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-orchestrator
+  namespace: distml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: job-orchestrator
+  template:
+    metadata:
+      labels:
+        app: job-orchestrator
+    spec:
+      containers:
+      - name: job-orchestrator
+        image: your-repo/job-orchestrator:latest # Replace with your image
+        ports:
+        - containerPort: 5000
+        env:
+        - name: CELERY_BROKER_URL
+          value: "amqp://user:password@rabbitmq.distml.svc.cluster.local:5672/"
+        - name: MINIO_URL
+          value: "minio.distml.svc.cluster.local:9000"
+        - name: REDIS_HOST
+          value: "redis.distml.svc.cluster.local"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: job-orchestrator
+  namespace: distml
+spec:
+  selector:
+    app: job-orchestrator
+  ports:
+  - port: 5000
+    targetPort: 5000
+---
+# Worker Node Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-node
+  namespace: distml
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker-node
+  template:
+    metadata:
+      labels:
+        app: worker-node
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8001'
+    spec:
+      containers:
+      - name: worker-node
+        image: your-repo/worker-node:latest # Replace with your image
+        env:
+        - name: CELERY_BROKER_URL
+          value: "amqp://user:password@rabbitmq.distml.svc.cluster.local:5672/"
+        - name: MINIO_URL
+          value: "minio.distml.svc.cluster.local:9000"
+---
+# Frontend Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: distml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: your-repo/frontend:latest # Replace with your image
+        ports:
+        - containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: distml
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 3000
+---
+# Ingress to expose frontend and api-gateway
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: distml-ingress
+  namespace: distml
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /api(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8000
+      - path: /()(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+---
+# Secrets
+apiVersion: v1
+kind: Secret
+metadata:
+  name: distml-secret
+  namespace: distml
+type: Opaque
+data:
+  jwt-secret: YS12ZXJ5LXNlY3JldC1rZXk= # base64 encoded "a-very-secret-key"

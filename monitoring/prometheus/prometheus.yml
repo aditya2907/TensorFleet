@@ -1,0 +1,45 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'tensorfleet'
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Monitoring service
+  - job_name: 'monitoring'
+    static_configs:
+      - targets: ['monitoring:8082']
+    metrics_path: '/metrics'
+
+  # Worker nodes (Docker Compose)
+  - job_name: 'workers'
+    dns_sd_configs:
+      - names:
+          - 'tasks.worker'
+        type: 'A'
+        port: 2112
+    
+  # Kubernetes worker discovery
+  - job_name: 'kubernetes-workers'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - tensorfleet
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        target_label: __address__
+        regex: ([^:]+)(?::\d+)?
+        replacement: ${1}:2112
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: worker

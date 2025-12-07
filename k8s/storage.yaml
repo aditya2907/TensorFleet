@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage
+  namespace: tensorfleet
+  labels:
+    app: storage
+    app.kubernetes.io/part-of: tensorfleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storage
+  template:
+    metadata:
+      labels:
+        app: storage
+        app.kubernetes.io/part-of: tensorfleet
+    spec:
+      containers:
+      - name: storage
+        image: ghcr.io/your-username/tensorfleet/storage:latest
+        ports:
+        - containerPort: 8081
+          name: http
+        env:
+        - name: PORT
+          value: "8081"
+        - name: MINIO_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: MINIO_ENDPOINT
+        - name: MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: tensorfleet-secrets
+              key: MINIO_ACCESS_KEY
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: tensorfleet-secrets
+              key: MINIO_SECRET_KEY
+        - name: MINIO_SECURE
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: MINIO_SECURE
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage-service
+  namespace: tensorfleet
+spec:
+  selector:
+    app: storage
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8081

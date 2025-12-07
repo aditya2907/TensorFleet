@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tensorfleet
+  labels:
+    name: tensorfleet
+    app.kubernetes.io/name: tensorfleet
+    app.kubernetes.io/part-of: tensorfleet

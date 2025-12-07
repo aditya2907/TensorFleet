@@ -1,0 +1,6 @@
+celery
+prometheus_client
+minio
+tensorflow
+tenacity
+pika

@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tensorfleet-config
+  namespace: tensorfleet
+data:
+  REDIS_ADDR: "redis-service:6379"
+  MINIO_ENDPOINT: "minio-service:9000"
+  MINIO_SECURE: "false"
+  ORCHESTRATOR_ADDR: "orchestrator-service:50051"
+  MONGODB_URL: "mongodb://admin:password123@mongodb-service:27017/tensorfleet?authSource=admin"
+  MONGODB_DB: "tensorfleet"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tensorfleet-secrets
+  namespace: tensorfleet
+type: Opaque
+stringData:
+  MINIO_ACCESS_KEY: "minioadmin"
+  MINIO_SECRET_KEY: "minioadmin"
+  MONGODB_USERNAME: "admin"
+  MONGODB_PASSWORD: "password123"

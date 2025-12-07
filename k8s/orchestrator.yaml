@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: tensorfleet
+  labels:
+    app: orchestrator
+    app.kubernetes.io/part-of: tensorfleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orchestrator
+  template:
+    metadata:
+      labels:
+        app: orchestrator
+        app.kubernetes.io/part-of: tensorfleet
+    spec:
+      containers:
+      - name: orchestrator
+        image: ghcr.io/your-username/tensorfleet/orchestrator:latest
+        ports:
+        - containerPort: 50051
+          name: grpc
+        env:
+        - name: PORT
+          value: "50051"
+        - name: REDIS_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: REDIS_ADDR
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator-service
+  namespace: tensorfleet
+spec:
+  selector:
+    app: orchestrator
+  ports:
+  - protocol: TCP
+    port: 50051
+    targetPort: 50051
+  clusterIP: None

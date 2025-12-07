@@ -1,0 +1,228 @@
+# TensorFleet - Git Ignore Configuration
+
+# ============================================================================
+# Environment Files (CRITICAL - Never commit these!)
+# ============================================================================
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+!.env.example
+
+# ============================================================================
+# Python
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.pkl
+*.joblib
+*.h5
+*.hdf5
+
+# Virtual Environments
+venv/
+ENV/
+env/
+.venv
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# PyCharm
+.idea/
+
+# ============================================================================
+# Go
+# ============================================================================
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output
+*.out
+
+# Go workspace
+go.work
+
+# ============================================================================
+# Node.js / Frontend
+# ============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+dist/
+dist-ssr/
+*.local
+
+# Editor directories
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ============================================================================
+# Docker
+# ============================================================================
+# Don't ignore docker-compose files, but ignore local overrides
+docker-compose.override.yml
+docker-compose.local.yml
+
+# ============================================================================
+# Database & Storage
+# ============================================================================
+# MongoDB
+*.mdb
+*.ldb
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Redis
+dump.rdb
+appendonly.aof
+
+# ============================================================================
+# Logs
+# ============================================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================================================================
+# OS Files
+# ============================================================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ============================================================================
+# ML Models & Data (IMPORTANT - Don't commit large datasets!)
+# ============================================================================
+# Trained models (except sample models)
+models/*.pkl
+models/*.h5
+models/*.pt
+models/*.pth
+models/*.onnx
+
+# Large datasets - exclude all data files
+data/
+data/*.csv
+data/*.parquet
+data/*.json
+data/**/*.csv
+data/**/*.parquet
+data/**/*.json
+!data/samples/
+!data/README.md
+
+# Checkpoints
+checkpoints/
+*.ckpt
+
+# ============================================================================
+# Temporary Files
+# ============================================================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+
+# ============================================================================
+# Test Coverage
+# ============================================================================
+coverage/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+
+# ============================================================================
+# Credentials & Secrets
+# ============================================================================
+*.pem
+*.key
+*.cert
+*.crt
+secrets/
+credentials/
+.secrets
+
+# ============================================================================
+# Kubernetes Secrets
+# ============================================================================
+k8s/secrets/
+k8s/*-secret.yaml
+!k8s/*-secret.yaml.example
+
+# ============================================================================
+# Backup Files
+# ============================================================================
+*.bak
+*.backup
+*.old
+
+# ============================================================================
+# Documentation Build
+# ============================================================================
+docs/_build/
+site/
+
+# ============================================================================
+# Proto Generated Files (if you regenerate them)
+# ============================================================================
+# Uncomment if you want to ignore generated proto files
+# proto/generated/
+# *_pb2.py
+# *_pb2_grpc.py
+
+# ============================================================================
+# Volume Data (Docker)
+# ============================================================================
+volumes/
+.volumes/
