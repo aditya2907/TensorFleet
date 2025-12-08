@@ -73,6 +73,25 @@ func NewWorkerServer() (*WorkerServer, error) {
 	return ws, nil
 }
 
+// isJobCancelled checks if a job has been cancelled or failed
+func (ws *WorkerServer) isJobCancelled(ctx context.Context, jobID string) (bool, error) {
+	// Create a context with timeout for the status check
+	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	
+	resp, err := ws.orchestratorClient.GetJobStatus(checkCtx, &orchestratorpb.GetJobStatusRequest{
+		JobId: jobID,
+	})
+	
+	if err != nil {
+		log.Printf("Failed to check job status: %v", err)
+		return false, err
+	}
+	
+	// Consider job cancelled if status is CANCELLED or FAILED
+	return resp.Status == "CANCELLED" || resp.Status == "FAILED", nil
+}
+
 func (ws *WorkerServer) ExecuteTask(ctx context.Context, req *workerpb.TaskRequest) (*workerpb.TaskResponse, error) {
 	start := time.Now()
 	log.Printf("Worker %s executing task %s (epoch %d, batches %d-%d)", 
@@ -81,8 +100,18 @@ func (ws *WorkerServer) ExecuteTask(ctx context.Context, req *workerpb.TaskReque
 	ws.currentTasks++
 	defer func() { ws.currentTasks-- }()
 
+	// Check if job is cancelled before starting
+	if cancelled, err := ws.isJobCancelled(ctx, req.JobId); err == nil && cancelled {
+		log.Printf("Task %s aborted - job %s was cancelled", req.TaskId, req.JobId)
+		return &workerpb.TaskResponse{
+			TaskId:  req.TaskId,
+			Success: false,
+			Message: "Task aborted - job was cancelled",
+		}, nil
+	}
+
 	// Simulate training
-	success, loss, accuracy := ws.simulateTraining(req)
+	success, loss, accuracy := ws.simulateTraining(ctx, req)
 
 	duration := time.Since(start).Seconds()
 	taskDuration.Observe(duration)
@@ -127,10 +156,28 @@ func (ws *WorkerServer) ExecuteTask(ctx context.Context, req *workerpb.TaskReque
 	}, nil
 }
 
-func (ws *WorkerServer) simulateTraining(req *workerpb.TaskRequest) (bool, float64, float64) {
-	// Simulate ML training with random sleep
-	sleepDuration := time.Duration(rand.Intn(3000)+1000) * time.Millisecond
-	time.Sleep(sleepDuration)
+func (ws *WorkerServer) simulateTraining(ctx context.Context, req *workerpb.TaskRequest) (bool, float64, float64) {
+	// Simulate ML training with periodic status checks
+	totalDuration := time.Duration(rand.Intn(3000)+1000) * time.Millisecond
+	checkInterval := 500 * time.Millisecond
+	elapsed := time.Duration(0)
+	
+	// Check job status periodically during training
+	for elapsed < totalDuration {
+		sleepTime := checkInterval
+		if totalDuration-elapsed < checkInterval {
+			sleepTime = totalDuration - elapsed
+		}
+		
+		time.Sleep(sleepTime)
+		elapsed += sleepTime
+		
+		// Check if job was cancelled during training
+		if cancelled, err := ws.isJobCancelled(ctx, req.JobId); err == nil && cancelled {
+			log.Printf("Training interrupted - job %s was cancelled", req.JobId)
+			return false, 0, 0
+		}
+	}
 
 	// Simulate convergence: loss decreases, accuracy increases over epochs
 	baseLoss := 2.5

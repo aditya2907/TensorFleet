@@ -22,6 +22,7 @@ type OrchestratorServer struct {
 	redisClient *redis.Client
 	jobs        map[string]*Job
 	taskQueue   chan *Task
+	workers     map[string]*WorkerActivity // Track worker activity
 	mu          sync.RWMutex
 }
 
@@ -57,6 +58,15 @@ type Task struct {
 	CompletedAt *time.Time
 }
 
+type WorkerActivity struct {
+	WorkerID         string
+	CurrentTaskID    string
+	CurrentJobID     string
+	TasksCompleted   int
+	LastActivityTime time.Time
+	Status           string // "IDLE", "BUSY"
+}
+
 func NewOrchestratorServer() (*OrchestratorServer, error) {
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
@@ -80,6 +90,7 @@ func NewOrchestratorServer() (*OrchestratorServer, error) {
 		redisClient: rdb,
 		jobs:        make(map[string]*Job),
 		taskQueue:   make(chan *Task, 1000),
+		workers:     make(map[string]*WorkerActivity),
 	}, nil
 }
 
@@ -114,7 +125,6 @@ func (s *OrchestratorServer) CreateTrainingJob(ctx context.Context, req *orchest
 				CreatedAt:  time.Now(),
 			}
 			job.Tasks = append(job.Tasks, task)
-			s.taskQueue <- task
 		}
 	}
 
@@ -124,6 +134,13 @@ func (s *OrchestratorServer) CreateTrainingJob(ctx context.Context, req *orchest
 	s.mu.Lock()
 	s.jobs[req.JobId] = job
 	s.mu.Unlock()
+
+	// Enqueue tasks asynchronously to avoid blocking job creation
+	go func() {
+		for _, task := range job.Tasks {
+			s.taskQueue <- task
+		}
+	}()
 
 	// Persist to Redis
 	if err := s.saveJobToRedis(ctx, job); err != nil {
@@ -147,7 +164,8 @@ func (s *OrchestratorServer) GetJobStatus(ctx context.Context, req *orchestrator
 
 	if !exists {
 		// Try to load from Redis
-		job, err := s.loadJobFromRedis(ctx, req.JobId)
+		var err error
+		job, err = s.loadJobFromRedis(ctx, req.JobId)
 		if err != nil {
 			return nil, fmt.Errorf("job not found: %s", req.JobId)
 		}
@@ -186,6 +204,24 @@ func (s *OrchestratorServer) AssignTask(ctx context.Context, req *orchestratorpb
 
 		task.WorkerID = req.WorkerId
 		task.Status = "ASSIGNED"
+
+		// Update worker activity
+		s.mu.Lock()
+		workerActivity, ok := s.workers[req.WorkerId]
+		if !ok {
+			workerActivity = &WorkerActivity{
+				WorkerID:      req.WorkerId,
+				Status:        "BUSY",
+				TasksCompleted: 0,
+				LastActivityTime: time.Now(),
+			}
+			s.workers[req.WorkerId] = workerActivity
+		}
+		workerActivity.CurrentTaskID = task.TaskID
+		workerActivity.CurrentJobID = task.JobID
+		workerActivity.Status = "BUSY"
+		workerActivity.LastActivityTime = time.Now()
+		s.mu.Unlock()
 
 		log.Printf("Assigned task %s (epoch %d) to worker %s", task.TaskID, task.Epoch, req.WorkerId)
 
@@ -228,6 +264,14 @@ func (s *OrchestratorServer) ReportTaskCompletion(ctx context.Context, req *orch
 		}
 	}
 
+	// Update worker activity
+	workerActivity, ok := s.workers[req.WorkerId]
+	if ok {
+		workerActivity.TasksCompleted++
+		workerActivity.Status = "IDLE"
+		workerActivity.LastActivityTime = time.Now()
+	}
+
 	// Save to Redis
 	if err := s.saveJobToRedis(ctx, job); err != nil {
 		log.Printf("Warning: Failed to save job to Redis: %v", err)
@@ -253,6 +297,75 @@ func (s *OrchestratorServer) UpdateJobMetrics(ctx context.Context, req *orchestr
 	job.UpdatedAt = time.Now()
 
 	return &orchestratorpb.JobMetricsResponse{Success: true}, nil
+}
+
+func (s *OrchestratorServer) CancelJob(ctx context.Context, req *orchestratorpb.CancelJobRequest) (*orchestratorpb.CancelJobResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	job, exists := s.jobs[req.JobId]
+	if !exists {
+		// Try to load from Redis
+		var err error
+		job, err = s.loadJobFromRedis(ctx, req.JobId)
+		if err != nil {
+			return &orchestratorpb.CancelJobResponse{
+				Success: false,
+				Message: fmt.Sprintf("Job not found: %s", req.JobId),
+			}, nil
+		}
+		s.jobs[req.JobId] = job
+	}
+
+	previousStatus := job.Status
+
+	// Check if job can be cancelled
+	if job.Status == "COMPLETED" || job.Status == "FAILED" || job.Status == "CANCELLED" {
+		return &orchestratorpb.CancelJobResponse{
+			Success:        false,
+			Message:        fmt.Sprintf("Cannot cancel job with status: %s", job.Status),
+			PreviousStatus: previousStatus,
+		}, nil
+	}
+
+	// Update job status to CANCELLED
+	job.Status = "CANCELLED"
+	job.UpdatedAt = time.Now()
+
+	// Save to Redis
+	if err := s.saveJobToRedis(ctx, job); err != nil {
+		log.Printf("Failed to save cancelled job to Redis: %v", err)
+	}
+
+	log.Printf("Job %s cancelled (previous status: %s)", req.JobId, previousStatus)
+
+	return &orchestratorpb.CancelJobResponse{
+		Success:        true,
+		Message:        fmt.Sprintf("Job %s has been cancelled", req.JobId),
+		PreviousStatus: previousStatus,
+	}, nil
+}
+
+func (s *OrchestratorServer) GetWorkerActivity(ctx context.Context, req *orchestratorpb.WorkerActivityRequest) (*orchestratorpb.WorkerActivityResponse, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	workers := make([]*orchestratorpb.WorkerInfo, 0, len(s.workers))
+	for _, worker := range s.workers {
+		workers = append(workers, &orchestratorpb.WorkerInfo{
+			WorkerId:         worker.WorkerID,
+			Status:           worker.Status,
+			CurrentTaskId:    worker.CurrentTaskID,
+			CurrentJobId:     worker.CurrentJobID,
+			TasksCompleted:   int32(worker.TasksCompleted),
+			LastActivityTime: worker.LastActivityTime.Unix(),
+		})
+	}
+
+	return &orchestratorpb.WorkerActivityResponse{
+		Workers:      workers,
+		TotalWorkers: int32(len(workers)),
+	}, nil
 }
 
 func (s *OrchestratorServer) saveJobToRedis(ctx context.Context, job *Job) error {

@@ -10,8 +10,12 @@ import pickle
 import logging
 import time
 import io
+import requests
 from datetime import datetime
 from typing import Dict, Any, Optional, List
+# Environment variables will be loaded by docker-compose from project .env file
+# No need for dotenv since docker-compose handles it
+from io import BytesIO
 import numpy as np
 import pandas as pd
 from pymongo import MongoClient
@@ -41,6 +45,57 @@ TASKS_COMPLETED = Counter('worker_tasks_completed_total', 'Completed tasks')
 TASKS_FAILED = Counter('worker_tasks_failed_total', 'Failed tasks')
 MODEL_ACCURACY = Gauge('worker_model_accuracy', 'Model accuracy', ['job_id', 'model_type'])
 MODELS_TRAINED = Counter('worker_models_trained_total', 'Total models trained', ['model_type'])
+
+# Storage Service Configuration
+STORAGE_SERVICE_URL = os.getenv('STORAGE_SERVICE_URL', 'http://storage:8081')
+
+def get_db():
+    """Get MongoDB database and GridFS collection"""
+    mongo_url = os.getenv('MONGODB_URL', 'mongodb://admin:password123@mongodb:27017/tensorfleet?authSource=admin')
+    db_name = os.getenv('MONGODB_DB', 'tensorfleet')
+    
+    client = MongoClient(mongo_url)
+    db = client[db_name]
+    fs = GridFS(db)
+    
+    return db, fs
+
+def download_dataset(dataset_path):
+    """Download dataset from storage service."""
+    try:
+        # Handle S3-style paths: s3://bucket/path/to/object
+        if dataset_path.startswith('s3://'):
+            parts = dataset_path[5:].split('/', 1)
+            bucket = parts[0]
+            object_name = parts[1] if len(parts) > 1 else ''
+        else:
+            # Handle simple 'bucket/path' format
+            parts = dataset_path.split('/', 1)
+            bucket = parts[0]
+            object_name = parts[1] if len(parts) > 1 else ''
+
+        if not bucket or not object_name:
+            raise ValueError("Invalid dataset path format. Expected 's3://<bucket>/<object_name>' or '<bucket>/<object_name>'.")
+
+        url = f"{STORAGE_SERVICE_URL}/api/v1/download/{bucket}/{object_name}"
+        logger.info(f"Downloading dataset from: {url}")
+        
+        response = requests.get(url)
+        response.raise_for_status()
+        
+        # Save to a temporary file
+        file_path = f"/tmp/{object_name.split('/')[-1]}"
+        with open(file_path, 'wb') as f:
+            f.write(response.content)
+            
+        logger.info(f"Dataset downloaded to: {file_path}")
+        return file_path
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to download dataset: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"An error occurred during dataset download: {e}")
+        raise
 
 class MongoDBManager:
     """Handles MongoDB connections and operations"""
@@ -394,18 +449,27 @@ class MLWorkerService:
         """Process a training job"""
         try:
             job_id = job_data.get('job_id')
-            dataset_name = job_data.get('dataset_name', 'iris')
+            dataset_path = job_data.get('dataset_path', 'datasets/iris.csv')  # Expecting 'datasets/filename.csv'
             algorithm = job_data.get('algorithm', 'random_forest')
             hyperparameters = job_data.get('hyperparameters', {})
             target_column = job_data.get('target_column')
             model_name = job_data.get('model_name', f"{algorithm}_{job_id}")
             
-            logger.info(f"Processing training job {job_id}: {algorithm} on {dataset_name}")
+            logger.info(f"Processing training job {job_id}: {algorithm} on {dataset_path}")
             
-            # Fetch dataset
-            data = self.mongodb_manager.fetch_dataset(dataset_name)
-            if data is None:
-                raise ValueError(f"Dataset {dataset_name} not found")
+            # Download dataset from MinIO storage
+            try:
+                local_dataset_path = download_dataset(dataset_path)
+                data = pd.read_csv(local_dataset_path)
+                logger.info(f"Loaded dataset from {dataset_path} with shape {data.shape}")
+            except Exception as e:
+                logger.error(f"Failed to download dataset from storage: {e}")
+                # Fallback: try to fetch from MongoDB
+                dataset_name = dataset_path.split('/')[-1].replace('.csv', '')
+                logger.info(f"Attempting to fetch dataset '{dataset_name}' from MongoDB as fallback")
+                data = self.mongodb_manager.fetch_dataset(dataset_name)
+                if data is None:
+                    raise ValueError(f"Dataset not found in storage or MongoDB: {dataset_path}")
             
             # Auto-detect target column if not specified
             if not target_column:
@@ -439,7 +503,7 @@ class MLWorkerService:
                 'hyperparameters': hyperparameters,
                 'metrics': metrics,
                 'version': version,
-                'dataset_name': dataset_name,
+                'dataset_path': dataset_path,  # Use dataset_path for MinIO compatibility
                 'target_column': target_column,
                 'features': features,
                 'training_duration': metrics['training_time'],

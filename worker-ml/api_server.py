@@ -14,6 +14,8 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import sys
 sys.path.append('/app')
 
+# Environment variables will be loaded by docker-compose from project .env file
+
 from main import MLWorkerService
 
 # Configure logging
@@ -67,7 +69,7 @@ def submit_training_job():
             return jsonify({'error': 'No JSON data provided'}), 400
         
         # Validate required fields
-        required_fields = ['job_id', 'dataset_name', 'algorithm']
+        required_fields = ['job_id', 'dataset_path', 'algorithm']
         for field in required_fields:
             if field not in job_data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400

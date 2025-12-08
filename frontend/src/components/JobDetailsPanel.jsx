@@ -13,6 +13,11 @@ import {
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CancelIcon from '@mui/icons-material/Cancel';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import JobStatusChip from './JobStatusChip';
+import JobMetrics from './JobMetrics';
+import LogViewer from './LogViewer';
+import JobProgressMonitor from './JobProgressMonitor';
+import TrainingProgressMonitor from './TrainingProgressMonitor';
 
 const StatusChip = ({ status }) => {
   const getColor = () => {
@@ -51,7 +56,7 @@ const MetricItem = ({ label, value }) => (
   </Box>
 );
 
-const JobDetailsPanel = ({ job, onRefresh, onCancel }) => {
+const JobDetailsPanel = ({ job, onRefresh, onCancel, onNotification }) => {
   if (!job) {
     return (
       <Card>
@@ -179,6 +184,22 @@ const JobDetailsPanel = ({ job, onRefresh, onCancel }) => {
               Cancel
             </Button>
           )}
+        </Box>
+        <Divider sx={{ my: 2 }} />
+        
+        {/* Real-time Training Progress with Artifact Generation */}
+        <Box sx={{ mb: 2 }}>
+          <TrainingProgressMonitor job={job} onNotification={onNotification} />
+        </Box>
+        
+        {/* Legacy Progress Monitor */}
+        <Box sx={{ mb: 2 }}>
+          <JobProgressMonitor jobId={job.job_id} jobData={job} />
+        </Box>
+        
+        <JobMetrics metrics={job.metrics} />
+        <Box sx={{ mt: 2 }}>
+          <LogViewer jobId={job.job_id} />
         </Box>
       </CardContent>
     </Card>

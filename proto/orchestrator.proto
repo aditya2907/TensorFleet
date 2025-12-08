@@ -10,6 +10,8 @@ service OrchestratorService {
   rpc AssignTask(AssignTaskRequest) returns (AssignTaskResponse);
   rpc ReportTaskCompletion(TaskCompletionRequest) returns (TaskCompletionResponse);
   rpc UpdateJobMetrics(JobMetricsRequest) returns (JobMetricsResponse);
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+  rpc GetWorkerActivity(WorkerActivityRequest) returns (WorkerActivityResponse);
 }
 
 message TrainingJobRequest {
@@ -84,4 +86,30 @@ message JobMetricsRequest {
 
 message JobMetricsResponse {
   bool success = 1;
+}
+
+message CancelJobRequest {
+  string job_id = 1;
+}
+
+message CancelJobResponse {
+  bool success = 1;
+  string message = 2;
+  string previous_status = 3;
+}
+
+message WorkerActivityRequest {}
+
+message WorkerActivityResponse {
+  repeated WorkerInfo workers = 1;
+  int32 total_workers = 2;
+}
+
+message WorkerInfo {
+  string worker_id = 1;
+  string status = 2;
+  string current_task_id = 3;
+  string current_job_id = 4;
+  int32 tasks_completed = 5;
+  int64 last_activity_time = 6;
 }

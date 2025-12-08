@@ -46,6 +46,16 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     access_token = jwt.encode(user, SECRET_KEY, algorithm=ALGORITHM)
     return {"access_token": access_token, "token_type": "bearer"}
 
+@app.get("/worker-activity")
+async def get_worker_activity():
+    """Get real-time worker activity without authentication for demo purposes"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{JOB_ORCHESTRATOR_URL}/worker-activity", timeout=10.0)
+            return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch worker activity: {str(e)}")
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def route_to_orchestrator(path: str, request: Request, user: dict = Depends(get_current_user)):
     async with httpx.AsyncClient() as client:

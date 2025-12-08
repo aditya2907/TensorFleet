@@ -8,7 +8,7 @@ data:
   MINIO_ENDPOINT: "minio-service:9000"
   MINIO_SECURE: "false"
   ORCHESTRATOR_ADDR: "orchestrator-service:50051"
-  MONGODB_URL: "mongodb+srv://aditya:N6dZepf9h6v8hSyQ@cluster0.poidcg0.mongodb.net/tensorfleet?retryWrites=true&w=majority"
+  MONGODB_URL: "mongodb://admin:password123@mongodb:27017/tensorfleet?authSource=admin"
   MONGODB_DB: "tensorfleet"
 ---
 apiVersion: v1

@@ -55,7 +55,7 @@ const JobsListPanel = ({ jobs, onSelectJob, selectedJobId }) => {
           📋 Recent Jobs
         </Typography>
         <Divider sx={{ mb: 1 }} />
-
+      {/* {console.log(jobs)} */}
         <List sx={{ maxHeight: 600, overflow: 'auto' }}>
           {jobs.slice(0, 10).map((job, index) => (
             <React.Fragment key={job.job_id || index}>
@@ -75,6 +75,8 @@ const JobsListPanel = ({ jobs, onSelectJob, selectedJobId }) => {
                   }}
                 >
                   <ListItemText
+                    primaryTypographyProps={{ component: 'div' }}
+                    secondaryTypographyProps={{ component: 'div' }}
                     primary={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>

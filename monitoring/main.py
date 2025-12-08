@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from prometheus_client import Counter, Gauge, Histogram, generate_latest, REGISTRY
 import os
@@ -64,7 +64,16 @@ def get_job_metrics():
 def get_job_metrics_detail(job_id):
     """Get detailed metrics for a specific job"""
     if job_id not in jobs_data:
-        return jsonify({'error': 'Job not found'}), 404
+        # Auto-register job with default values instead of returning 404
+        jobs_data[job_id] = {
+            'job_id': job_id,
+            'status': 'UNKNOWN',
+            'start_time': time.time(),
+            'progress': {'percentage': 0, 'current_epoch': 0, 'total_epochs': 10},
+            'metrics': {'loss': 0.0, 'accuracy': 0.0},
+            'logs': []
+        }
+        logger.info(f"Auto-registered job {job_id} with default values")
 
     job = jobs_data[job_id]
     return jsonify(job), 200
@@ -72,7 +81,6 @@ def get_job_metrics_detail(job_id):
 @app.route('/api/v1/metrics/jobs/<job_id>', methods=['POST'])
 def update_job_metrics(job_id):
     """Update metrics for a specific job"""
-    from flask import request
     
     data = request.get_json()
     
@@ -163,6 +171,57 @@ def get_dashboard_data():
         'avg_loss': avg_loss,
         'avg_accuracy': avg_accuracy,
         'timestamp': time.time()
+    }), 200
+
+@app.route('/worker-activity', methods=['GET'])
+def get_worker_activity():
+    """Get real-time worker activity data for visualization"""
+    current_time = time.time()
+    
+    # Format worker data for the WorkerVisualization component
+    workers_list = []
+    for worker_id, worker_data in workers_data.items():
+        last_activity = worker_data.get('updated_at', worker_data.get('registered_at', current_time))
+        
+        # Determine worker status based on last activity (consider inactive if no update in 30 seconds)
+        is_active = (current_time - last_activity) < 30
+        status = worker_data.get('status', 'IDLE') if is_active else 'OFFLINE'
+        
+        workers_list.append({
+            'worker_id': worker_id,
+            'status': status,
+            'current_task_id': worker_data.get('current_task_id', ''),
+            'current_job_id': worker_data.get('current_job_id', ''),
+            'tasks_completed': worker_data.get('tasks_completed', 0),
+            'last_activity_time': last_activity,
+            'cpu_usage': worker_data.get('cpu_usage', 0),
+            'memory_usage': worker_data.get('memory_usage', 0),
+            'uptime': current_time - worker_data.get('registered_at', current_time),
+            'is_active': is_active
+        })
+    
+    # Add mock workers if none exist for demonstration
+    if not workers_list:
+        for i in range(1, 4):
+            workers_list.append({
+                'worker_id': f'tensorfleet-worker-{i}',
+                'status': 'IDLE' if i > 1 else 'BUSY',
+                'current_task_id': f'task_{int(current_time)}_{i}' if i == 1 else '',
+                'current_job_id': 'demo_job' if i == 1 else '',
+                'tasks_completed': i * 5,
+                'last_activity_time': current_time - (i * 2),
+                'cpu_usage': 20 + (i * 15),
+                'memory_usage': 30 + (i * 10),
+                'uptime': 3600 + (i * 300),
+                'is_active': True
+            })
+    
+    return jsonify({
+        'workers': workers_list,
+        'total_workers': len(workers_list),
+        'active_workers': len([w for w in workers_list if w['is_active']]),
+        'busy_workers': len([w for w in workers_list if w['status'] == 'BUSY']),
+        'timestamp': current_time
     }), 200
 
 def simulate_metrics():
