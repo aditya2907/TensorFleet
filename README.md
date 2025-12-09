@@ -191,8 +191,8 @@ Get TensorFleet running in under 2 minutes with Docker Compose:
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/tensorfleet.git
-cd tensorfleet
+git clone https://github.com/aditya2907/TensorFleet.git
+cd TensorFleet
 
 # Start all services
 docker-compose up -d
@@ -203,6 +203,40 @@ make status-check
 # Access the dashboard
 open http://localhost:3000
 ```
+
+### ✅ Prerequisites
+
+- Docker Desktop (latest) with Docker Engine >= 24
+- Docker Compose v2 (bundled with Docker Desktop)
+- macOS, Linux, or Windows WSL2
+- Open local ports (default):
+  - 3000 (Frontend), 8080 (API Gateway), 8081 (Monitoring), 8082 (Storage), 8084 (Model Service), 8085 (ML Worker), 27017 (MongoDB), 6379 (Redis), 9000/9001 (MinIO), 9090 (Prometheus)
+- Optional: Make (GNU Make) for helper targets
+
+### 🧰 First-Run Checklist
+
+1. Copy environment defaults (if present):
+   ```bash
+   cp .env.example .env || true
+   ```
+2. Start infrastructure and core services:
+   ```bash
+   docker-compose -f docker-compose.development.yml up -d
+   ```
+3. Validate service health:
+   ```bash
+   make status-check || docker ps
+   ```
+4. Run a demo workflow:
+   ```bash
+   ./demo-mongodb-ml.sh
+   ```
+5. Verify endpoints:
+   - Frontend: http://localhost:3000
+   - API Gateway: http://localhost:8080
+   - Grafana: http://localhost:3001 (admin/admin)
+   - Prometheus: http://localhost:9090
+   - MinIO: http://localhost:9001 (admin/password123)
 
 ### 🎯 Quick Demo
 

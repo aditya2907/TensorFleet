@@ -154,10 +154,15 @@ class MongoDBManager:
             # Serialize model
             model_bytes = pickle.dumps(model)
             
+            # Create a clean filename based on model name and timestamp
+            clean_name = metadata['name'].replace(' ', '_').lower()
+            timestamp = metadata.get('timestamp', datetime.now().strftime('%Y%m%d_%H%M%S'))
+            filename = f"{clean_name}_{metadata['version']}.pkl"
+            
             # Save to GridFS
             file_id = self.fs.put(
                 model_bytes,
-                filename=f"model_{metadata['job_id']}_{metadata['version']}.pkl",
+                filename=filename,
                 content_type="application/octet-stream",
                 metadata=metadata
             )
@@ -453,7 +458,17 @@ class MLWorkerService:
             algorithm = job_data.get('algorithm', 'random_forest')
             hyperparameters = job_data.get('hyperparameters', {})
             target_column = job_data.get('target_column')
-            model_name = job_data.get('model_name', f"{algorithm}_{job_id}")
+            # Create a user-friendly model name based on algorithm and dataset
+            dataset_name = dataset_path.split('/')[-1].replace('.csv', '')
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+            default_model_name = f"{algorithm}_{dataset_name}_{timestamp}"
+            
+            # Get model name - prefer user-provided name, fallback to generated name
+            model_name = job_data.get('model_name')
+            if not model_name:
+                model_name = default_model_name
+            
+            logger.info(f"Using model name: {model_name} (dataset: {dataset_name}, algorithm: {algorithm})")
             
             logger.info(f"Processing training job {job_id}: {algorithm} on {dataset_path}")
             
@@ -495,11 +510,15 @@ class MLWorkerService:
             # Generate version
             version = f"v{int(time.time())}"
             
-            # Prepare metadata
+            # Prepare metadata with job_name and dataset_name for descriptive file naming
+            job_name = job_data.get('job_name', job_id)  # Use job_name from request or fallback to job_id
+            
             metadata = {
                 'job_id': job_id,
+                'job_name': job_name,
                 'name': model_name,
                 'algorithm': algorithm,
+                'dataset_name': dataset_name,
                 'hyperparameters': hyperparameters,
                 'metrics': metrics,
                 'version': version,
@@ -507,7 +526,9 @@ class MLWorkerService:
                 'target_column': target_column,
                 'features': features,
                 'training_duration': metrics['training_time'],
-                'model_type': 'sklearn'
+                'model_type': 'sklearn',
+                'timestamp': datetime.now().strftime('%Y%m%d_%H%M%S'),
+                'created_at': datetime.now().isoformat()
             }
             
             # Save model

@@ -119,6 +119,20 @@ class StorageManager:
         """Calculate MD5 checksum of data"""
         return hashlib.md5(data).hexdigest()
     
+    def _sanitize_filename(self, name: str) -> str:
+        """Sanitize filename to be filesystem-safe"""
+        import re
+        if not name:
+            return "unnamed"
+        # Replace spaces and special characters with underscores
+        sanitized = re.sub(r'[^\w\-_.]', '_', str(name).strip())
+        # Remove multiple consecutive underscores
+        sanitized = re.sub(r'_+', '_', sanitized)
+        # Remove leading/trailing underscores
+        sanitized = sanitized.strip('_')
+        # Limit length
+        return sanitized[:50] if sanitized else "unnamed"
+    
     # ==================== MODEL OPERATIONS ====================
     
     def save_model(self, model_data: bytes, metadata: Dict[str, Any]) -> Dict[str, str]:
@@ -137,8 +151,19 @@ class StorageManager:
             model_name = metadata.get('name', f"model_{job_id}")
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
             
-            # Generate object name
-            object_name = f"{job_id}/{model_name}_{timestamp}.pkl"
+            # Create descriptive filename: job_name + algorithm + dataset_name
+            job_name = metadata.get('job_name', 'unnamed_job')
+            algorithm = metadata.get('algorithm', 'unknown_algo')
+            dataset_name = metadata.get('dataset_name', 'unknown_dataset')
+            
+            # Clean names to be filesystem-safe
+            clean_job_name = self._sanitize_filename(job_name)
+            clean_algorithm = self._sanitize_filename(algorithm)
+            clean_dataset = self._sanitize_filename(dataset_name)
+            
+            # Generate descriptive object name
+            descriptive_name = f"{clean_job_name}_{clean_algorithm}_{clean_dataset}"
+            object_name = f"models/{descriptive_name}_{timestamp}.pkl"
             
             # Calculate checksum
             checksum = self._calculate_checksum(model_data)
@@ -282,8 +307,19 @@ class StorageManager:
             epoch = metadata.get('epoch', 0)
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
             
-            # Generate object name
-            object_name = f"{job_id}/checkpoint_epoch_{epoch}_{timestamp}.pkl"
+            # Create descriptive filename: job_name + algorithm + dataset_name + epoch
+            job_name = metadata.get('job_name', 'unnamed_job')
+            algorithm = metadata.get('algorithm', 'unknown_algo')
+            dataset_name = metadata.get('dataset_name', 'unknown_dataset')
+            
+            # Clean names to be filesystem-safe
+            clean_job_name = self._sanitize_filename(job_name)
+            clean_algorithm = self._sanitize_filename(algorithm)
+            clean_dataset = self._sanitize_filename(dataset_name)
+            
+            # Generate descriptive object name
+            descriptive_name = f"{clean_job_name}_{clean_algorithm}_{clean_dataset}_epoch_{epoch}"
+            object_name = f"checkpoints/{descriptive_name}_{timestamp}.pkl"
             
             # Calculate checksum
             checksum = self._calculate_checksum(checkpoint_data)
@@ -400,9 +436,21 @@ class StorageManager:
             artifact_name = metadata.get('name', f"artifact_{job_id}")
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
             
-            # Generate object name
+            # Create descriptive filename: job_name + algorithm + dataset_name + artifact_type
+            job_name = metadata.get('job_name', 'unnamed_job')
+            algorithm = metadata.get('algorithm', 'unknown_algo')
+            dataset_name = metadata.get('dataset_name', 'unknown_dataset')
+            
+            # Clean names to be filesystem-safe
+            clean_job_name = self._sanitize_filename(job_name)
+            clean_algorithm = self._sanitize_filename(algorithm)
+            clean_dataset = self._sanitize_filename(dataset_name)
+            clean_artifact_type = self._sanitize_filename(artifact_type)
+            
+            # Generate descriptive object name
             file_ext = metadata.get('extension', 'bin')
-            object_name = f"{job_id}/{artifact_type}/{artifact_name}_{timestamp}.{file_ext}"
+            descriptive_name = f"{clean_job_name}_{clean_algorithm}_{clean_dataset}_{clean_artifact_type}"
+            object_name = f"artifacts/{descriptive_name}_{timestamp}.{file_ext}"
             
             # Calculate checksum
             checksum = self._calculate_checksum(artifact_data)
@@ -481,9 +529,21 @@ class StorageManager:
             dataset_name = metadata['name']
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
             
-            # Generate object name
+            # Create descriptive filename for dataset
+            job_name = metadata.get('job_name')
             file_ext = metadata.get('extension', 'csv')
-            object_name = f"{dataset_name}_{timestamp}.{file_ext}"
+            
+            # Clean names to be filesystem-safe
+            clean_dataset_name = self._sanitize_filename(dataset_name)
+            
+            # Generate descriptive object name
+            if job_name:
+                clean_job_name = self._sanitize_filename(job_name)
+                descriptive_name = f"{clean_job_name}_{clean_dataset_name}"
+            else:
+                descriptive_name = clean_dataset_name
+            
+            object_name = f"datasets/{descriptive_name}_{timestamp}.{file_ext}"
             
             # Calculate checksum
             checksum = self._calculate_checksum(dataset_data)
