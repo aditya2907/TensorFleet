@@ -8,7 +8,6 @@ import logging
 from io import BytesIO
 import json
 from datetime import datetime
-from datetime import datetime
 
 app = Flask(__name__)
 CORS(app) # Enable CORS for all routes
@@ -51,6 +50,7 @@ def ensure_buckets():
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint with MinIO and MongoDB connectivity tests"""
+    logger.info("=== HEALTH CHECK ENDPOINT CALLED ===")
     try:
         # Test MinIO connectivity
         try:
@@ -448,6 +448,121 @@ def update_job_endpoint(job_id):
     
     except Exception as e:
         logger.error(f"Error updating job: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/debug-test', methods=['GET'])
+def test_debug():
+    """Debug test endpoint"""
+    logger.info("=== DEBUG TEST ENDPOINT HIT ===")
+    return jsonify({'message': 'Debug endpoint working', 'timestamp': datetime.now().isoformat()})
+
+@app.route('/debug-routes', methods=['GET'])
+def debug_routes():
+    """List all registered routes"""
+    logger.info("=== DEBUG ROUTES ENDPOINT HIT ===")
+    routes = []
+    for rule in app.url_map.iter_rules():
+        routes.append({
+            'endpoint': rule.endpoint,
+            'methods': list(rule.methods),
+            'rule': str(rule)
+        })
+    return jsonify({'routes': routes})
+
+@app.route('/api/v1/jobs/<job_id>/auto-save-model', methods=['POST'])
+def auto_save_model_endpoint(job_id):
+    """Automatically save model when job completes"""
+    logger.info(f"=== AUTO-SAVE ENDPOINT CALLED FOR JOB: {job_id} ===")
+    try:
+        logger.info(f"Request method: {request.method}")
+        logger.info(f"Request path: {request.path}")
+        logger.info(f"Request headers: {dict(request.headers)}")
+        
+        # Get job information from request body (sent by orchestrator)
+        job_data = request.get_json()
+        logger.info(f"Auto-save endpoint called for job {job_id}, received data: {job_data}")
+        if not job_data:
+            logger.error(f"No job data received for job {job_id}")
+            return jsonify({'error': 'Job data is required'}), 400
+        
+        # Verify job ID matches
+        if job_data.get('job_id') != job_id:
+            return jsonify({'error': 'Job ID mismatch'}), 400
+        
+        if job_data.get('status') != 'COMPLETED':
+            return jsonify({'error': 'Job must be completed to save model'}), 400
+        
+        # Check if model already exists for this job
+        existing_models = storage_manager.list_models(job_id=job_id, limit=1)
+        if existing_models:
+            return jsonify({
+                'message': 'Model already exists for this job',
+                'model_id': existing_models[0]['_id']
+            }), 200
+        
+        # Extract dataset name from path (remove file extension if present)
+        dataset_path = job_data.get('dataset_path', 'unknown_dataset')
+        if '/' in dataset_path:
+            dataset_name = dataset_path.split('/')[-1]
+        else:
+            dataset_name = dataset_path
+        
+        # Remove common file extensions
+        if '.' in dataset_name:
+            dataset_name = dataset_name.split('.')[0]
+        
+        # Create descriptive model name: JobName_ModelType_Dataset
+        job_name = job_data.get('job_name', job_id).replace(' ', '_')
+        model_type = job_data.get('model_type', 'UnknownModel')
+        
+        descriptive_model_name = f"{job_name}_{model_type}_{dataset_name}"
+        
+        # Create model metadata from job information
+        model_metadata = {
+            'job_id': job_id,
+            'name': descriptive_model_name,
+            'algorithm': job_data.get('model_type', 'unknown'),
+            'hyperparameters': job_data.get('hyperparameters', {}),
+            'metrics': {
+                'accuracy': job_data.get('current_accuracy', 0.0),
+                'loss': job_data.get('current_loss', 0.0),
+                'completed_tasks': job_data.get('completed_tasks', 0),
+                'total_tasks': job_data.get('total_tasks', 0)
+            },
+            'version': '1.0',
+            'dataset_name': dataset_name,
+            'job_name': job_data.get('job_name', job_id),
+            'model_type': 'trained'
+        }
+        
+        # Create a model file with job completion data
+        model_data = {
+            'job_id': job_id,
+            'model_type': job_data.get('model_type'),
+            'final_metrics': model_metadata['metrics'],
+            'hyperparameters': job_data.get('hyperparameters', {}),
+            'training_completed_at': datetime.utcnow().isoformat(),
+            'auto_saved': True,
+            'dataset_path': job_data.get('dataset_path'),
+            'epochs': job_data.get('epochs'),
+            'num_workers': job_data.get('num_workers')
+        }
+        
+        model_bytes = json.dumps(model_data, indent=2).encode('utf-8')
+        
+        # Save model using storage manager
+        result = storage_manager.save_model(model_bytes, model_metadata)
+        
+        logger.info(f"Automatically saved model for completed job {job_id}")
+        
+        return jsonify({
+            'message': 'Model automatically saved successfully',
+            'model_id': result['mongo_id'],
+            'minio_path': result['minio_path']
+        }), 201
+    
+    except Exception as e:
+        logger.error(f"Error auto-saving model for job {job_id}: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/v1/jobs', methods=['GET'])

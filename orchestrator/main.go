@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -65,6 +67,58 @@ type WorkerActivity struct {
 	TasksCompleted   int
 	LastActivityTime time.Time
 	Status           string // "IDLE", "BUSY"
+}
+
+// autoSaveModel triggers automatic model saving when job completes
+func (s *OrchestratorServer) autoSaveModel(ctx context.Context, jobID string, job *Job) {
+	storageURL := os.Getenv("STORAGE_SERVICE_URL")
+	if storageURL == "" {
+		storageURL = "http://storage:8081"
+	}
+
+	// Prepare job data to send to storage service
+	jobData := map[string]interface{}{
+		"job_id":           job.JobID,
+		"job_name":         job.JobID, // Using JobID as job name for now
+		"model_type":       job.ModelType,
+		"dataset_path":     job.DatasetPath,
+		"hyperparameters":  job.Hyperparameters,
+		"current_accuracy": job.CurrentAccuracy,
+		"current_loss":     job.CurrentLoss,
+		"completed_tasks":  job.CompletedTasks,
+		"total_tasks":      job.TotalTasks,
+		"epochs":          job.Epochs,
+		"num_workers":     job.NumWorkers,
+		"status":          job.Status,
+		"created_at":      job.CreatedAt.Format(time.RFC3339),
+		"updated_at":      job.UpdatedAt.Format(time.RFC3339),
+	}
+
+	// Convert to JSON
+	jsonData, err := json.Marshal(jobData)
+	if err != nil {
+		log.Printf("Warning: Failed to marshal job data for auto-save: %v", err)
+		return
+	}
+
+	// Call storage service to auto-save model
+	client := &http.Client{Timeout: 30 * time.Second}
+	url := fmt.Sprintf("%s/api/v1/jobs/%s/auto-save-model", storageURL, jobID)
+	
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Warning: Failed to auto-save model for job %s: %v", jobID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 201 {
+		log.Printf("✅ Successfully auto-saved model for completed job %s", jobID)
+	} else if resp.StatusCode == 200 {
+		log.Printf("ℹ️  Model already exists for job %s", jobID)
+	} else {
+		log.Printf("⚠️  Failed to auto-save model for job %s (status: %d)", jobID, resp.StatusCode)
+	}
 }
 
 func NewOrchestratorServer() (*OrchestratorServer, error) {
@@ -261,6 +315,9 @@ func (s *OrchestratorServer) ReportTaskCompletion(ctx context.Context, req *orch
 		if job.CompletedTasks >= job.TotalTasks {
 			job.Status = "COMPLETED"
 			log.Printf("Job %s completed!", req.JobId)
+			
+			// Trigger automatic model saving in background
+			go s.autoSaveModel(ctx, req.JobId, job)
 		}
 	}
 

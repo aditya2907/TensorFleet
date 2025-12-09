@@ -6,6 +6,8 @@ from datetime import datetime
 from minio import Minio
 from minio.error import S3Error
 import redis
+import requests
+import threading
 
 app = Flask(__name__)
 
@@ -26,6 +28,24 @@ minio_client = Minio(
     secret_key=os.getenv('MINIO_SECRET_KEY', 'minioadmin'),
     secure=False
 )
+
+def auto_save_model(job_id):
+    """Automatically save model when job completes"""
+    try:
+        storage_url = os.getenv('STORAGE_SERVICE_URL', 'http://storage:8081')
+        url = f"{storage_url}/api/v1/jobs/{job_id}/auto-save-model"
+        
+        response = requests.post(url, json={}, timeout=30)
+        
+        if response.status_code == 201:
+            print(f"✅ Successfully auto-saved model for completed job {job_id}")
+        elif response.status_code == 200:
+            print(f"ℹ️  Model already exists for job {job_id}")
+        else:
+            print(f"⚠️  Failed to auto-save model for job {job_id} (status: {response.status_code})")
+            
+    except Exception as e:
+        print(f"Warning: Failed to auto-save model for job {job_id}: {e}")
 
 @app.route('/api/v1/jobs', methods=['POST'])
 def submit_job():
@@ -124,6 +144,12 @@ def get_job_status(job_id):
     if current_status == 'SUCCESS':
         job_info['result'] = task_result.get()
         job_info['completed_at'] = str(datetime.now())
+        
+        # Check if this is the first time we're marking it as completed
+        if job_info.get('status') != 'COMPLETED':
+            job_info['status'] = 'COMPLETED'
+            # Trigger auto-save model in background
+            threading.Thread(target=auto_save_model, args=(job_id,), daemon=True).start()
     elif current_status == 'FAILURE':
         job_info['error'] = str(task_result.info)
         job_info['failed_at'] = str(datetime.now())

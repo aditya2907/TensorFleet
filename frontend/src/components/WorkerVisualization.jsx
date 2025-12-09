@@ -91,8 +91,26 @@ const WorkerVisualization = () => {
     }
   };
 
-  const formatWorkerId = (workerId) => {
-    return workerId.length > 20 ? workerId.substring(0, 20) + '...' : workerId;
+  const formatWorkerId = (workerId, index) => {
+    // Convert hex UUID to user-friendly name like worker-1, worker-2, etc.
+    if (!workerId) return `Worker ${index + 1}`;
+    
+    // If it's already in a friendly format, return as-is
+    if (workerId.startsWith('worker-') && !workerId.includes('-') !== 4) {
+      return workerId;
+    }
+    
+    // Create a consistent hash from the worker ID to ensure same worker gets same number
+    let hash = 0;
+    for (let i = 0; i < workerId.length; i++) {
+      const char = workerId.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    // Use absolute value and mod to get a consistent worker number
+    const workerNumber = Math.abs(hash % 100) + 1; // 1-100 range
+    return `worker-${workerNumber}`;
   };
 
   const formatTimestamp = (timestamp) => {
@@ -214,7 +232,7 @@ const WorkerVisualization = () => {
                     color: worker.is_active ? 'text.primary' : 'text.disabled',
                     flex: 1
                   }}>
-                    {formatWorkerId(worker.worker_id)}
+                    {formatWorkerId(worker.worker_id, index)}
                   </Typography>
                   <Chip 
                     size="small" 

@@ -124,7 +124,7 @@ export const storageAPI = {
   getJobs: () => storageClient.get('/api/v1/jobs'),
   getJob: (jobId) => storageClient.get(`/api/v1/jobs/${jobId}`),
   updateJob: (jobId, jobData) => storageClient.put(`/api/v1/jobs/${jobId}`, jobData),
-  getRecentJobs: () => storageClient.get('/api/v1/jobs/recent'),
+  getRecentJobs: (limit = 50) => storageClient.get(`/api/v1/jobs/recent?limit=${limit}`),
   
   createDataset: (datasetData) => storageClient.post('/api/v1/datasets', datasetData),
   getDatasets: () => storageClient.get('/api/v1/datasets'),
@@ -134,6 +134,9 @@ export const storageAPI = {
   
   createArtifact: (artifactData) => storageClient.post('/api/v1/artifacts', artifactData),
   getArtifacts: (jobId) => storageClient.get(`/api/v1/artifacts/${jobId}`),
+  
+  // Automatic model saving for job completion
+  autoSaveModel: (jobId) => storageClient.post(`/api/v1/jobs/${jobId}/auto-save-model`),
 };
 
 // Monitoring API

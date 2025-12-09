@@ -15,6 +15,7 @@ import {
   Alert,
   Snackbar,
 } from '@mui/material';
+import './enhanced-styles.css';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import WorkIcon from '@mui/icons-material/Work';
@@ -24,15 +25,15 @@ import ComputerIcon from '@mui/icons-material/Computer';
 import DashboardMetrics from './components/DashboardMetrics';
 import JobSubmissionForm from './components/JobSubmissionForm';
 import JobDetailsPanel from './components/JobDetailsPanel';
-import JobsListPanel from './components/JobsListPanel';
 import ModelRegistryPanel from './components/ModelRegistryPanel';
 import DatasetManagerPanel from './components/DatasetManagerPanel';
 import StorageOverviewPanel from './components/StorageOverviewPanel';
 import WorkerVisualization from './components/WorkerVisualization';
 import ErrorBoundary from './components/ErrorBoundary';
+import ThemeToggle from './components/ThemeToggle';
 import { jobsAPI, monitoringAPI, storageAPI } from './api/api';
 
-const drawerWidth = 240;
+const drawerWidth = 200;
 
 function App() {
   const [metrics, setMetrics] = useState(null);
@@ -229,8 +230,8 @@ function App() {
         );
       case 'jobs':
         return (
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={4}>
+          <Grid container spacing={4}>
+            <Grid item xs={12} lg={selectedJob ? 5 : 8}>
               <ErrorBoundary>
                 <JobSubmissionForm 
                   onSubmit={handleSubmitJob} 
@@ -240,18 +241,8 @@ function App() {
                 />
               </ErrorBoundary>
             </Grid>
-            <Grid item xs={12} md={8}>
-              <ErrorBoundary>
-                <JobsListPanel
-                  jobs={recentJobs}
-                  onSelectJob={handleSelectJob}
-                  onCancelJob={handleCancelJob}
-                  selectedJobId={selectedJob?.job_id}
-                />
-              </ErrorBoundary>
-            </Grid>
             {selectedJob && (
-              <Grid item xs={12}>
+              <Grid item xs={12} lg={7}>
                 <ErrorBoundary>
                   <JobDetailsPanel
                     job={selectedJob}
@@ -284,21 +275,64 @@ function App() {
   };
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <CssBaseline />
+      <Box 
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
+          zIndex: -2,
+        }}
+      />
+      <Box 
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: `
+            radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+            radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
+            radial-gradient(circle at 40% 80%, rgba(120, 200, 255, 0.3) 0%, transparent 50%)
+          `,
+          zIndex: -1,
+        }}
+      />
       <Drawer
         variant="permanent"
         sx={{
           width: drawerWidth,
           flexShrink: 0,
-          [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: 'border-box' },
+          [`& .MuiDrawer-paper`]: { 
+            width: drawerWidth, 
+            boxSizing: 'border-box',
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            borderRight: '1px solid rgba(255, 255, 255, 0.2)',
+          },
         }}
       >
-        <Toolbar>
-          <RocketLaunchIcon sx={{ mr: 2 }} />
-          <Typography variant="h6" noWrap>
-            TensorFleet
-          </Typography>
+        <Toolbar sx={{ 
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          borderRadius: '0 0 20px 0',
+          mb: 2,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <RocketLaunchIcon sx={{ mr: 2, color: 'white' }} />
+            <Typography variant="h6" noWrap sx={{ fontWeight: 700 }}>
+              TensorFleet
+            </Typography>
+          </Box>
+          <ThemeToggle sx={{ color: 'white' }} />
         </Toolbar>
         <Box sx={{ overflow: 'auto' }}>
           <List>
@@ -341,17 +375,44 @@ function App() {
           </List>
         </Box>
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-        <Container maxWidth="xl">
+      <Box 
+        component="main" 
+        sx={{ 
+          flexGrow: 1, 
+          p: 4,
+          background: 'rgba(255, 255, 255, 0.05)',
+          backdropFilter: 'blur(10px)',
+          minHeight: '100vh',
+        }}
+      >
+        <Box sx={{ 
+          width: '100%',
+          maxWidth: 'none',
+          background: 'rgba(255, 255, 255, 0.1)',
+          borderRadius: '24px',
+          padding: '24px',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          minHeight: 'calc(100vh - 120px)',
+          margin: 0,
+        }}>
           {renderContent()}
-        </Container>
+        </Box>
         <Snackbar
           open={notification.open}
           autoHideDuration={6000}
           onClose={handleCloseNotification}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         >
-          <Alert onClose={handleCloseNotification} severity={notification.severity} sx={{ width: '100%' }}>
+          <Alert 
+            onClose={handleCloseNotification} 
+            severity={notification.severity} 
+            sx={{ 
+              width: '100%',
+              borderRadius: '12px',
+              backdropFilter: 'blur(10px)',
+            }}
+          >
             {notification.message}
           </Alert>
         </Snackbar>

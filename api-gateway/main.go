@@ -27,6 +27,14 @@ func min(a, b int) int {
 	return b
 }
 
+// Helper function to get maximum of two int64 values (ensures non-negative uptime)
+func max(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 type GatewayServer struct {
 	orchestratorClient orchestratorpb.OrchestratorServiceClient
 	redisClient        *redis.Client
@@ -111,6 +119,7 @@ func (gs *GatewayServer) setupRoutes() {
 		api.GET("/jobs/:id/logs", gs.handleGetJobLogs)
 		api.GET("/jobs", gs.handleListJobs)
 		api.DELETE("/jobs/:id", gs.handleCancelJob)
+		api.GET("/workers", gs.handleGetWorkers)
 	}
 }
 
@@ -510,10 +519,8 @@ func (gs *GatewayServer) handleWorkerActivity(c *gin.Context) {
 		}
 
 		// Calculate uptime (assuming workers started when they first contacted orchestrator)
-		uptime := time.Now().Unix() - worker.LastActivityTime
-		if uptime < 0 {
-			uptime = 0
-		}
+		// Ensure uptime is never negative by using max(0, calculated_uptime)
+		uptime := max(0, time.Now().Unix() - worker.LastActivityTime)
 
 		workers = append(workers, map[string]interface{}{
 			"worker_id":           worker.WorkerId,
@@ -536,6 +543,44 @@ func (gs *GatewayServer) handleWorkerActivity(c *gin.Context) {
 		"busy_workers":   busyWorkers,
 		"timestamp":      time.Now().Unix(),
 	})
+}
+
+func (gs *GatewayServer) handleGetWorkers(c *gin.Context) {
+	// Get worker activity from orchestrator via gRPC
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	resp, err := gs.orchestratorClient.GetWorkerActivity(ctx, &orchestratorpb.WorkerActivityRequest{})
+	if err != nil {
+		log.Printf("Error fetching workers from orchestrator: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Failed to fetch workers",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	log.Printf("DEBUG: Got %d workers from orchestrator for /api/v1/workers", resp.TotalWorkers)
+
+	// Convert gRPC response to API format
+	workers := make([]map[string]interface{}, 0)
+
+	for _, worker := range resp.Workers {
+		isActive := worker.Status == "BUSY" || worker.Status == "IDLE"
+		
+		workers = append(workers, map[string]interface{}{
+			"id":                 worker.WorkerId,
+			"worker_id":          worker.WorkerId,
+			"status":             worker.Status,
+			"current_task_id":    worker.CurrentTaskId,
+			"current_job_id":     worker.CurrentJobId,
+			"tasks_completed":    worker.TasksCompleted,
+			"last_activity":      worker.LastActivityTime,
+			"is_active":          isActive,
+		})
+	}
+
+	c.JSON(http.StatusOK, workers)
 }
 
 func (gs *GatewayServer) handleCancelJob(c *gin.Context) {

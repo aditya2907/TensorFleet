@@ -160,7 +160,8 @@ Each TensorFleet service is documented with comprehensive setup, API, and deploy
 
 - **🚀 Distributed Training**: Automatically scale ML training across multiple worker nodes
 - **🧠 Model Registry**: Version-controlled model storage with metadata and GridFS integration
-- **📊 Real-time Monitoring**: Live training metrics, system health, and performance dashboards
+- **� Automatic Model Saving**: Models are automatically saved to storage when training jobs complete
+- **�📊 Real-time Monitoring**: Live training metrics, system health, and performance dashboards
 - **🔄 Job Orchestration**: Intelligent task scheduling with load balancing and fault tolerance
 - **🗄️ Data Management**: S3-compatible storage for datasets, models, and artifacts
 - **🔒 Security & Auth**: JWT authentication, RBAC, and secure service-to-service communication
@@ -1731,6 +1732,29 @@ Response:
   "total_tasks": 50,
   "current_loss": 0.234,
   "current_accuracy": 0.897
+}
+```
+
+### Automatic Model Saving
+
+**POST** `/api/v1/jobs/:id/auto-save-model`
+
+Automatically saves the trained model when a job completes. This endpoint is called automatically by the orchestrator when job status becomes "COMPLETED".
+
+Response (Success):
+```json
+{
+  "message": "Model automatically saved successfully",
+  "model_id": "507f1f77bcf86cd799439011",
+  "minio_path": "s3://models/job_name_algorithm_dataset_20241209_143022.pkl"
+}
+```
+
+Response (Already Exists):
+```json
+{
+  "message": "Model already exists for this job",
+  "model_id": "507f1f77bcf86cd799439011"
 }
 ```
 

@@ -458,10 +458,15 @@ class MLWorkerService:
             algorithm = job_data.get('algorithm', 'random_forest')
             hyperparameters = job_data.get('hyperparameters', {})
             target_column = job_data.get('target_column')
-            # Create a user-friendly model name based on algorithm and dataset
-            dataset_name = dataset_path.split('/')[-1].replace('.csv', '')
+            # Extract dataset name from path (remove file extension)
+            dataset_name = dataset_path.split('/')[-1]
+            if '.' in dataset_name:
+                dataset_name = dataset_name.split('.')[0]
+            
+            # Get job name and create descriptive model name: JobName_ModelType_Dataset
+            job_name = job_data.get('job_name', 'UnnamedJob').replace(' ', '_')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-            default_model_name = f"{algorithm}_{dataset_name}_{timestamp}"
+            default_model_name = f"{job_name}_{algorithm}_{dataset_name}"
             
             # Get model name - prefer user-provided name, fallback to generated name
             model_name = job_data.get('model_name')

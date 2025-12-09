@@ -31,14 +31,18 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
   const [artifacts, setArtifacts] = useState([]);
   const [checkpoints, setCheckpoints] = useState([]);
 
-  // Simulate real training progress and generate artifacts
+  // Helper function to generate model name using the new naming convention
+  const generateModelName = (job) => {
+    const datasetName = job.dataset_path ? 
+      job.dataset_path.split('/').pop().split('.')[0] : 'dataset';
+    return `${job.job_name}_${job.model_type}_${datasetName}`;
+  };
+
+  // Real-time job status monitoring (disabled fake artifact generation)
   useEffect(() => {
     if (job?.status === 'RUNNING' && job?.job_id) {
-      const interval = setInterval(() => {
-        generateTrainingArtifacts();
-      }, 5000); // Generate artifacts every 5 seconds
-
-      return () => clearInterval(interval);
+      // Just monitor the job status, don't generate fake artifacts
+      // Real artifacts should come from the actual ML training process
     }
   }, [job?.job_id, job?.status]);
 
@@ -195,7 +199,10 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
         type: 'application/json'
       });
       
-      const modelFile = new File([modelBlob], `${job.job_name}_model.json`, {
+      // Generate model name using new naming convention
+      const modelName = generateModelName(job);
+      
+      const modelFile = new File([modelBlob], `${modelName}.json`, {
         type: 'application/json'
       });
 
@@ -203,7 +210,7 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
       const formData = new FormData();
       formData.append('file', modelFile);
       
-      await fetch(`http://localhost:8081/api/v1/upload/models/${job.job_name}/${job.job_name}_model.json`, {
+      await fetch(`http://localhost:8081/api/v1/upload/models/${job.job_name}/${modelName}.json`, {
         method: 'POST',
         body: formData,
       });
@@ -229,9 +236,12 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
         body: modelMetadata,
       });
 
+      // Generate the expected model name using the new naming convention
+      const expectedModelName = generateModelName(job);
+      
       onNotification?.({
         open: true,
-        message: `Model saved successfully: ${job.job_name}`,
+        message: `Model auto-saved: ${expectedModelName}`,
         severity: 'success',
       });
 
@@ -264,20 +274,37 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
         </Box>
 
         <Collapse in={expanded}>
+          {/* Main Progress Section */}
           <Box sx={{ mb: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body2">
-                Epoch {currentEpoch} of {totalEpochs}
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Overall Progress
               </Typography>
-              <Typography variant="body2">
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
                 {progress.toFixed(1)}%
               </Typography>
             </Box>
             <LinearProgress 
               variant="determinate" 
               value={progress} 
-              sx={{ height: 8, borderRadius: 4 }}
+              sx={{ 
+                height: 12, 
+                borderRadius: 6,
+                background: 'rgba(102, 126, 234, 0.1)',
+                '& .MuiLinearProgress-bar': {
+                  background: 'linear-gradient(90deg, #667eea, #764ba2)',
+                  borderRadius: 6,
+                }
+              }}
             />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+              <Typography variant="caption" color="textSecondary">
+                Epoch {currentEpoch} of {totalEpochs}
+              </Typography>
+              <Typography variant="caption" color="textSecondary">
+                {job.completed_tasks || 0} / {job.total_tasks || 0} tasks completed
+              </Typography>
+            </Box>
           </Box>
 
           <Grid container spacing={2}>
@@ -290,13 +317,13 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
                   <Box>
                     <Typography variant="caption" color="textSecondary">Loss</Typography>
                     <Typography variant="h6" color="primary">
-                      {(Math.max(0.1, 1.0 - (currentEpoch * 0.08))).toFixed(4)}
+                      {job.current_loss ? job.current_loss.toFixed(4) : 'N/A'}
                     </Typography>
                   </Box>
                   <Box>
                     <Typography variant="caption" color="textSecondary">Accuracy</Typography>
                     <Typography variant="h6" color="primary">
-                      {(Math.min(0.98, 0.5 + (currentEpoch * 0.04))).toFixed(4)}
+                      {job.current_accuracy ? (job.current_accuracy * 100).toFixed(2) + '%' : 'N/A'}
                     </Typography>
                   </Box>
                 </Box>
@@ -308,21 +335,20 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
                 <Typography variant="subtitle2" gutterBottom>
                   💾 Artifacts Generated
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Chip size="small" label={`${checkpoints.length} Checkpoints`} color="success" />
                   <Chip size="small" label={`${artifacts.length} Logs`} color="info" />
+                  {job?.status === 'COMPLETED' && (
+                    <Chip 
+                      size="small" 
+                      icon={<CloudUploadIcon />}
+                      label={`Auto-Saved: ${generateModelName(job)}`}
+                      color="secondary" 
+                      sx={{ mt: 0.5 }}
+                      title="Model automatically saved with descriptive naming: JobName_ModelType_Dataset"
+                    />
+                  )}
                 </Box>
-                {job?.status === 'COMPLETED' && (
-                  <Button
-                    size="small"
-                    startIcon={<SaveIcon />}
-                    onClick={saveModel}
-                    disabled={savingArtifacts}
-                    sx={{ mt: 1 }}
-                  >
-                    Save Model
-                  </Button>
-                )}
               </Paper>
             </Grid>
           </Grid>

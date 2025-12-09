@@ -1,0 +1,255 @@
+/* Enhanced Global Styles for TensorFleet - Fix Theme Issues */
+
+/* Fix MUI Grid container spacing issues */
+.MuiGrid-container {
+  --Grid-parentWidth: -32px;
+  --Grid-columns: 12;
+  display: flex;
+  flex-wrap: wrap;
+  width: calc(100% + var(--Grid-parentWidth));
+  margin-left: var(--Grid-parentWidth);
+}
+
+.MuiGrid-container > .MuiGrid-item {
+  padding-left: 32px;
+  padding-top: 32px;
+}
+
+/* Enhanced form styling */
+.form-section {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.02), rgba(118, 75, 162, 0.02));
+  border-radius: 16px;
+  border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+.form-section-title {
+  color: #667eea !important;
+  font-weight: 600 !important;
+  margin-bottom: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+/* Enhanced TextField focus effects */
+.MuiTextField-root .MuiOutlinedInput-root.Mui-focused {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.15);
+}
+
+/* Enhanced Button hover effects */
+.MuiButton-root:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+}
+
+/* Card hover improvements */
+.MuiCard-root {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.MuiCard-root:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Chip improvements */
+.MuiChip-root {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease !important;
+}
+
+.MuiChip-root:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Status chip improvements */
+.MuiChip-colorSuccess {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  color: white !important;
+}
+
+.MuiChip-colorError {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  color: white !important;
+}
+
+.MuiChip-colorWarning {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: white !important;
+}
+
+.MuiChip-colorInfo {
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  color: white !important;
+}
+
+.MuiChip-colorPrimary {
+  background: linear-gradient(135deg, #667eea, #764ba2) !important;
+  color: white !important;
+}
+
+.MuiChip-colorSecondary {
+  background: linear-gradient(135deg, #f093fb, #e066c8) !important;
+  color: white !important;
+}
+
+/* Enhanced Alert styling */
+.MuiAlert-root {
+  border-radius: 12px !important;
+  font-weight: 500 !important;
+  backdrop-filter: blur(10px);
+}
+
+.MuiAlert-standardWarning {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.1)) !important;
+  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+  color: #92400e !important;
+}
+
+.MuiAlert-standardError {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.1)) !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  color: #991b1b !important;
+}
+
+.MuiAlert-standardSuccess {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1)) !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  color: #064e3b !important;
+}
+
+.MuiAlert-standardInfo {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.1)) !important;
+  border: 1px solid rgba(59, 130, 246, 0.3) !important;
+  color: #1e3a8a !important;
+}
+
+/* Enhanced MenuItem hover effects */
+.MuiMenuItem-root:hover {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1)) !important;
+  transform: translateX(4px);
+}
+
+/* Progress bar enhancements */
+.MuiLinearProgress-root {
+  border-radius: 8px !important;
+  height: 8px !important;
+  background: rgba(102, 126, 234, 0.1) !important;
+}
+
+.MuiLinearProgress-bar {
+  background: linear-gradient(90deg, #667eea, #764ba2) !important;
+  border-radius: 8px !important;
+}
+
+/* Typography improvements */
+.gradient-text {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+}
+
+/* Form validation improvements */
+.MuiTextField-root .MuiOutlinedInput-root.Mui-error {
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* Loading spinner improvements */
+.MuiCircularProgress-root {
+  color: #667eea !important;
+}
+
+/* Scrollbar improvements */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(102, 126, 234, 0.05);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #5a67d8, #6b46c1);
+}
+
+/* Form section animations */
+.form-section {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Checkbox improvements */
+.MuiCheckbox-root.Mui-checked {
+  color: #667eea !important;
+}
+
+.MuiFormControlLabel-label {
+  font-weight: 500 !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+/* Paper elevation improvements */
+.MuiPaper-elevation1 {
+  box-shadow: 0 2px 12px rgba(102, 126, 234, 0.08) !important;
+}
+
+.MuiPaper-elevation2 {
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.12) !important;
+}
+
+.MuiPaper-elevation3 {
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.15) !important;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .MuiGrid-container > .MuiGrid-item {
+    padding-left: 16px;
+    padding-top: 16px;
+  }
+  
+  .form-section {
+    margin-bottom: 16px;
+    padding: 16px;
+  }
+}
+
+/* Focus improvements for accessibility */
+.MuiButton-root:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+}
+
+.MuiTextField-root .MuiOutlinedInput-root:focus-within {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+}

@@ -16,6 +16,11 @@ const JobStatusChip = ({ status }) => {
       label={status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown'}
       color={statusColors[status] || 'default'}
       size="small"
+      sx={{ 
+        '& .MuiChip-label': { 
+          color: 'inherit' 
+        } 
+      }}
     />
   );
 };
