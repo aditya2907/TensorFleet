@@ -128,8 +128,8 @@ services:
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_SECURE=false
-      - MONGODB_URL=${MONGODB_URL}
-      - MONGODB_DB=${MONGODB_DB}
+      - MONGODB_URL=mongodb://admin:password123@mongodb:27017/tensorfleet?authSource=admin
+      - MONGODB_DB=tensorfleet
     depends_on:
       minio:
         condition: service_healthy

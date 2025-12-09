@@ -42,7 +42,7 @@ def health_check():
 @app.route('/metrics', methods=['GET'])
 def metrics():
     """Prometheus metrics endpoint"""
-    return generate_latest(REGISTRY)
+    return generate_latest(REGISTRY), 200, {'Content-Type': 'text/plain; version=0.0.4; charset=utf-8'}
 
 @app.route('/api/v1/metrics/jobs', methods=['GET'])
 def get_job_metrics():

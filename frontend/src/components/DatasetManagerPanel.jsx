@@ -13,8 +13,14 @@ import {
   CircularProgress,
   LinearProgress,
   Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Skeleton,
 } from '@mui/material';
-import { CloudUpload as CloudUploadIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { CloudUpload as CloudUploadIcon, Delete as DeleteIcon, FolderOpen as FolderOpenIcon } from '@mui/icons-material';
 import { storageAPI } from '../api/api';
 
 const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
@@ -22,6 +28,8 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [datasetToDelete, setDatasetToDelete] = useState(null);
 
   const fetchDatasets = async () => {
     try {
@@ -64,9 +72,17 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
       });
       fetchDatasets();
     } catch (error) {
+      let errorMessage = 'Upload failed';
+      if (error.response?.status === 413) {
+        errorMessage = 'File is too large. Maximum size is 100MB.';
+      } else if (error.response?.status === 415) {
+        errorMessage = 'Unsupported file type. Please upload CSV files only.';
+      } else {
+        errorMessage = error.message || 'An unexpected error occurred during upload';
+      }
       onNotification({
         open: true,
-        message: `Upload failed: ${error.message}`,
+        message: errorMessage,
         severity: 'error',
       });
     } finally {
@@ -74,22 +90,37 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
     }
   };
 
-  const handleDelete = async (objectName) => {
+  const handleDeleteClick = (objectName) => {
+    setDatasetToDelete(objectName);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!datasetToDelete) return;
+    
     try {
-      await storageAPI.deleteDataset(objectName);
+      await storageAPI.deleteDataset(datasetToDelete);
       onNotification({
         open: true,
         message: 'Dataset deleted successfully!',
-        severity: 'info',
+        severity: 'success',
       });
       fetchDatasets();
     } catch (error) {
       onNotification({
         open: true,
-        message: `Failed to delete dataset: ${error.message}`,
+        message: `Delete failed: ${error.message}`,
         severity: 'error',
       });
+    } finally {
+      setDeleteDialogOpen(false);
+      setDatasetToDelete(null);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setDatasetToDelete(null);
   };
 
   return (
@@ -118,7 +149,7 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
               <ListItem
                 key={ds.name}
                 secondaryAction={
-                  <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(ds.name)}>
+                  <IconButton edge="end" aria-label="delete" onClick={() => handleDeleteClick(ds.name)}>
                     <DeleteIcon />
                   </IconButton>
                 }
@@ -129,11 +160,43 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
           </List>
         )}
         {datasets.length === 0 && !loading && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            No datasets found. Upload a dataset to get started.
-          </Alert>
+          <Box sx={{ py: 4, textAlign: 'center' }}>
+            <FolderOpenIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No Datasets Yet
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Upload a CSV dataset to start training models
+            </Typography>
+          </Box>
         )}
       </CardContent>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">
+          Delete Dataset?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            Are you sure you want to delete "{datasetToDelete}"? This action cannot be undone.
+            Any training jobs using this dataset may fail.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained" autoFocus>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Card>
   );
 };

@@ -97,6 +97,34 @@ def download_dataset(dataset_path):
         logger.error(f"An error occurred during dataset download: {e}")
         raise
 
+def save_model_to_storage(model_data: bytes, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Save trained model to MinIO storage service."""
+    try:
+        url = f"{STORAGE_SERVICE_URL}/api/v1/models"
+        logger.info(f"Saving model to storage service: {url}")
+        
+        # Prepare multipart form data
+        files = {
+            'file': ('model.pkl', BytesIO(model_data), 'application/octet-stream')
+        }
+        data = {
+            'metadata': json.dumps(metadata)
+        }
+        
+        response = requests.post(url, files=files, data=data, timeout=60)
+        response.raise_for_status()
+        
+        result = response.json()
+        logger.info(f"Model saved to MinIO storage: {result.get('result', {}).get('minio_path')}")
+        return result
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to save model to storage service: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"An error occurred during model save: {e}")
+        raise
+
 class MongoDBManager:
     """Handles MongoDB connections and operations"""
     
@@ -536,8 +564,18 @@ class MLWorkerService:
                 'created_at': datetime.now().isoformat()
             }
             
-            # Save model
+            # Save model to MongoDB (legacy)
             model_id = self.mongodb_manager.save_model(model, metadata)
+            
+            # Automatically save model to MinIO storage service
+            try:
+                model_bytes = pickle.dumps(model)
+                storage_result = save_model_to_storage(model_bytes, metadata)
+                logger.info(f"Model automatically saved to MinIO: {storage_result.get('result', {}).get('minio_path')}")
+                minio_model_id = storage_result.get('result', {}).get('mongo_id')
+            except Exception as e:
+                logger.warning(f"Failed to save model to MinIO storage (will continue with MongoDB only): {e}")
+                minio_model_id = None
             
             # Update Prometheus metrics
             MODEL_ACCURACY.labels(job_id=job_id, model_type=algorithm).set(metrics['test_accuracy'])
@@ -547,6 +585,7 @@ class MLWorkerService:
             result = {
                 'job_id': job_id,
                 'model_id': model_id,
+                'minio_model_id': minio_model_id,
                 'status': 'completed',
                 'metrics': metrics,
                 'model_name': model_name,

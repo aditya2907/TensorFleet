@@ -629,6 +629,75 @@ def sync_storage_databases():
             'jobs': {'synced': 0, 'errors': []},
         }
         
+        # Sync models from MinIO to MongoDB
+        try:
+            models_in_minio = list(minio_client.list_objects('models', recursive=True))
+            for obj in models_in_minio:
+                try:
+                    # Check if model already exists in MongoDB
+                    existing = storage_manager.db.models.find_one({'minio_path': obj.object_name})
+                    if not existing:
+                        # Extract job_id from filename pattern: {job_id}_{model_type}_{dataset}_{timestamp}.pkl
+                        filename = obj.object_name.split('/')[-1].replace('.pkl', '')
+                        filename_parts = filename.split('_')
+                        
+                        # Default metadata
+                        model_metadata = {
+                            'name': filename,
+                            'minio_path': obj.object_name,
+                            'bucket': 'models',
+                            'size': obj.size,
+                            'created_at': obj.last_modified or datetime.utcnow(),
+                            'algorithm': 'Unknown',
+                            'version': '1.0',
+                            'status': 'ready',
+                            'hyperparameters': {},
+                            'metrics': {}
+                        }
+                        
+                        # Try to extract job_id and lookup real training data
+                        if len(filename_parts) >= 1:
+                            potential_job_id = filename_parts[0]
+                            job_record = storage_manager.db.jobs.find_one({'job_id': potential_job_id})
+                            
+                            if job_record:
+                                # Use real training data from job record
+                                model_metadata.update({
+                                    'job_id': job_record.get('job_id'),
+                                    'name': job_record.get('job_name', filename),
+                                    'algorithm': job_record.get('model_type', 'Unknown'),
+                                    'hyperparameters': job_record.get('hyperparameters', {}),
+                                    'metrics': {
+                                        'accuracy': job_record.get('current_accuracy', 0.0),
+                                        'loss': job_record.get('current_loss', 0.0),
+                                        'completed_tasks': job_record.get('completed_tasks', 0),
+                                        'total_tasks': job_record.get('total_tasks', 0),
+                                        'status': job_record.get('status', 'unknown')
+                                    },
+                                    'dataset_name': job_record.get('dataset_path', 'unknown').split('/')[-1].split('.')[0] if job_record.get('dataset_path') else 'unknown',
+                                    'epochs': job_record.get('epochs'),
+                                    'learning_rate': job_record.get('learning_rate'),
+                                    'batch_size': job_record.get('batch_size'),
+                                    'optimizer': job_record.get('optimizer'),
+                                    'model_type': 'trained'
+                                })
+                                logger.info(f"Synced model with real training data: {obj.object_name}")
+                            else:
+                                # Fallback: extract model_type from filename
+                                if len(filename_parts) >= 2:
+                                    model_type = filename_parts[1]
+                                    model_metadata['algorithm'] = model_type
+                                    model_metadata['name'] = f"{model_type}_{filename_parts[2] if len(filename_parts) > 2 else 'Unknown'}"
+                                    logger.info(f"Synced model with extracted metadata: {obj.object_name}")
+                        
+                        storage_manager.db.models.insert_one(model_metadata)
+                        sync_results['models']['synced'] += 1
+                        
+                except Exception as e:
+                    sync_results['models']['errors'].append(f"Error syncing {obj.object_name}: {str(e)}")
+        except Exception as e:
+            sync_results['models']['errors'].append(f"Error accessing models bucket: {str(e)}")
+        
         # Sync datasets from MinIO to MongoDB
         try:
             datasets_in_minio = list(minio_client.list_objects('datasets', recursive=True))

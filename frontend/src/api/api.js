@@ -118,7 +118,8 @@ export const storageAPI = {
   // Database operations for metadata
   createModel: (modelData) => storageClient.post('/api/v1/models', modelData),
   getModels: () => storageClient.get('/api/v1/models'),
-  getModel: (modelId) => storageClient.get(`/api/v1/models/${modelId}`),
+  getModel: (modelId) => storageClient.get(`/api/v1/models/${modelId}`, { responseType: 'blob' }),
+  downloadModel: (modelId) => storageClient.get(`/api/v1/models/${modelId}`, { responseType: 'blob' }),
   
   createJob: (jobData) => storageClient.post('/api/v1/jobs', jobData),
   getJobs: () => storageClient.get('/api/v1/jobs'),

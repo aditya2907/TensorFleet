@@ -1,0 +1,7 @@
+FROM minio/minio:latest
+
+# Expose MinIO ports
+EXPOSE 9000 9001
+
+# Start MinIO server
+CMD ["server", "/data", "--console-address", ":9001"]

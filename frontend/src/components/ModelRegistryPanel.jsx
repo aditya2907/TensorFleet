@@ -23,6 +23,8 @@ import {
   InputLabel,
   TextField,
   Collapse,
+  Skeleton,
+  Alert,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
@@ -31,6 +33,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import SortIcon from '@mui/icons-material/Sort';
+import ModelTrainingIcon from '@mui/icons-material/ModelTraining';
 import { modelServiceAPI, storageAPI } from '../api/api';
 import ModelComparisonDialog from './ModelComparisonDialog';
 
@@ -55,42 +58,44 @@ const ModelRegistryPanel = ({ onNotification }) => {
       const filesResponse = await storageAPI.listModels();
       const modelFiles = filesResponse.data.objects || [];
       
-      // Combine metadata with file information and add mock evaluation data
+      // Combine metadata with file information and use real training data
       const enhancedModels = storageModels.map((model, index) => {
         const matchingFile = modelFiles.find(file => 
           file.name.includes(model.name) || file.name.includes(model._id)
         );
         
-        // Generate realistic evaluation metrics for demo
-        const baseAccuracy = 0.85 + (Math.random() * 0.12);
-        const baseLoss = 0.15 + (Math.random() * 0.10);
-        const f1Score = 0.80 + (Math.random() * 0.15);
-        const precision = 0.82 + (Math.random() * 0.13);
-        const recall = 0.78 + (Math.random() * 0.17);
+        // Use real metrics from the model if available, otherwise provide defaults
+        const realMetrics = model.metrics || {};
+        const realHyperparams = model.hyperparameters || {};
         
         return {
           ...model,
           file_info: matchingFile,
-          file_size: matchingFile?.size || 0,
-          last_modified: matchingFile?.last_modified,
+          file_size: matchingFile?.size || model.size_bytes || 0,
+          last_modified: matchingFile?.last_modified || model.created_at,
           evaluation_metrics: {
-            accuracy: parseFloat(baseAccuracy.toFixed(4)),
-            loss: parseFloat(baseLoss.toFixed(4)),
-            f1_score: parseFloat(f1Score.toFixed(4)),
-            precision: parseFloat(precision.toFixed(4)),
-            recall: parseFloat(recall.toFixed(4)),
-            training_time: `${(45 + Math.random() * 120).toFixed(1)}min`,
-            epochs: Math.floor(20 + Math.random() * 80),
-            batch_size: [16, 32, 64, 128][Math.floor(Math.random() * 4)],
-            learning_rate: parseFloat((0.0001 + Math.random() * 0.01).toFixed(6))
+            // Use real metrics from training
+            accuracy: realMetrics.accuracy || realMetrics.val_accuracy || 0,
+            loss: realMetrics.loss || realMetrics.val_loss || 0,
+            f1_score: realMetrics.f1_score || realMetrics.val_f1_score || 0,
+            precision: realMetrics.precision || realMetrics.val_precision || 0,
+            recall: realMetrics.recall || realMetrics.val_recall || 0,
+            training_time: realMetrics.training_time || realMetrics.training_duration || 'N/A',
+            // Use real hyperparameters from job submission
+            epochs: realHyperparams.epochs || model.epochs || 0,
+            batch_size: parseInt(realHyperparams.batch_size) || 32,
+            learning_rate: parseFloat(realHyperparams.learning_rate) || 0.001
           },
           algorithm_details: {
-            architecture: model.algorithm || 'ResNet50',
-            optimizer: ['Adam', 'SGD', 'RMSprop'][Math.floor(Math.random() * 3)],
-            loss_function: ['CrossEntropy', 'MSE', 'BCE'][Math.floor(Math.random() * 3)],
-            regularization: ['L2', 'L1', 'Dropout', 'None'][Math.floor(Math.random() * 4)],
-            data_augmentation: Math.random() > 0.5,
-            pretrained: Math.random() > 0.3
+            architecture: model.algorithm || model.model_type || 'Unknown',
+            optimizer: realHyperparams.optimizer || 'Unknown',
+            loss_function: realHyperparams.loss_function || 'Unknown',
+            regularization: realHyperparams.regularization || 'None',
+            data_augmentation: realHyperparams.data_augmentation || false,
+            pretrained: realHyperparams.pretrained || false,
+            validation_split: parseFloat(realHyperparams.validation_split) || 0.2,
+            early_stopping: realHyperparams.early_stopping === 'true' || realHyperparams.early_stopping === true,
+            save_checkpoints: realHyperparams.save_checkpoints === 'true' || realHyperparams.save_checkpoints === true
           }
         };
       });
@@ -128,14 +133,19 @@ const ModelRegistryPanel = ({ onNotification }) => {
         throw new Error('Model ID is missing');
       }
       
-      const response = await modelServiceAPI.downloadModel(modelId);
+      // Use storage API to download model from MinIO
+      const response = await storageAPI.downloadModel(modelId);
+      
+      // Create download link from blob response
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${model.name || 'model'}_${model.version}.pkl`);
+      link.setAttribute('download', `${model.name || 'model'}_${model.version || 'v1'}.pkl`);
       document.body.appendChild(link);
       link.click();
       link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url); // Clean up
+      
       onNotification({
         open: true,
         message: `Downloading model: ${model.name}`,
@@ -143,9 +153,30 @@ const ModelRegistryPanel = ({ onNotification }) => {
       });
     } catch (error) {
       console.error('Error downloading model:', error);
+      let errorMessage = 'Failed to download model';
+      
+      if (error.response) {
+        // Server responded with error
+        if (error.response.status === 404) {
+          errorMessage = 'Model file not found. It may have been deleted.';
+        } else if (error.response.status === 403) {
+          errorMessage = 'You do not have permission to download this model.';
+        } else if (error.response.status === 500) {
+          errorMessage = 'Server error while downloading model. Please try again.';
+        } else {
+          errorMessage = error.response.data?.error || 'Failed to download model';
+        }
+      } else if (error.request) {
+        // Request made but no response
+        errorMessage = 'Cannot connect to storage service. Please check your connection.';
+      } else {
+        // Something else happened
+        errorMessage = error.message || 'An unexpected error occurred';
+      }
+      
       onNotification({
         open: true,
-        message: `Failed to download model: ${error.message}`,
+        message: errorMessage,
         severity: 'error',
       });
     }
@@ -241,20 +272,24 @@ const ModelRegistryPanel = ({ onNotification }) => {
             📦 Model Registry & Performance Analytics
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button
-              variant="outlined"
-              onClick={fetchModels}
-              disabled={loading}
-              size="small"
-              sx={{ minWidth: 'auto' }}
-            >
-              {loading ? <CircularProgress size={16} /> : '🔄'}
-            </Button>
+            <Tooltip title="Refresh models list">
+              <Button
+                variant="outlined"
+                onClick={fetchModels}
+                disabled={loading}
+                size="small"
+                sx={{ minWidth: 'auto' }}
+                aria-label="Refresh models list"
+              >
+                {loading ? <CircularProgress size={16} /> : '🔄'}
+              </Button>
+            </Tooltip>
             <Button
               variant="outlined"
               startIcon={<CompareArrowsIcon />}
               disabled={selectedModels.length < 2}
               onClick={handleOpenComparison}
+              aria-label={`Compare models (${selectedModels.length} selected)`}
             >
               Compare Models
             </Button>
@@ -330,8 +365,23 @@ const ModelRegistryPanel = ({ onNotification }) => {
         <Divider sx={{ mb: 2 }} />
         
         {loading && models.length === 0 ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress />
+          <Box sx={{ py: 2 }}>
+            {[1, 2, 3].map((item) => (
+              <Paper key={item} sx={{ p: 2, mb: 2, borderRadius: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Skeleton variant="rectangular" width={40} height={40} />
+                  <Box sx={{ flexGrow: 1 }}>
+                    <Skeleton variant="text" width="60%" height={30} />
+                    <Skeleton variant="text" width="80%" height={20} sx={{ mt: 1 }} />
+                    <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+                      <Skeleton variant="rectangular" width="100%" height={6} />
+                      <Skeleton variant="rectangular" width="100%" height={6} />
+                    </Box>
+                  </Box>
+                  <Skeleton variant="rectangular" width={100} height={36} />
+                </Box>
+              </Paper>
+            ))}
           </Box>
         ) : (
           <List sx={{ maxHeight: 600, overflow: 'auto' }}>
@@ -406,8 +456,13 @@ const ModelRegistryPanel = ({ onNotification }) => {
                         }
                       />
                       <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Tooltip title="View Details">
-                          <IconButton onClick={() => toggleExpanded(modelId)} size="small">
+                        <Tooltip title={isExpanded ? "Hide details" : "View details"}>
+                          <IconButton 
+                            onClick={() => toggleExpanded(modelId)} 
+                            size="small"
+                            aria-label={isExpanded ? "Hide model details" : "View model details"}
+                            aria-expanded={isExpanded}
+                          >
                             {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                           </IconButton>
                         </Tooltip>
@@ -417,6 +472,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
                           startIcon={<DownloadIcon />}
                           onClick={() => handleDownload(model)}
                           color={isTopPerformer ? 'success' : 'primary'}
+                          aria-label={`Download ${model.name} version ${model.version}`}
                         >
                           Download
                         </Button>
@@ -491,9 +547,27 @@ const ModelRegistryPanel = ({ onNotification }) => {
         )}
         
         {filteredSortedModels.length === 0 && !loading && (
-          <Typography color="textSecondary" align="center" sx={{ py: 4 }}>
-            No models found matching your criteria.
-          </Typography>
+          <Box sx={{ py: 6, textAlign: 'center' }}>
+            <ModelTrainingIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              {models.length === 0 ? 'No Models Yet' : 'No Models Found'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {models.length === 0 
+                ? 'Train your first model to see it here. Submit a training job to get started!'
+                : 'Try adjusting your search or filter criteria.'}
+            </Typography>
+            {models.length === 0 && (
+              <Button 
+                variant="contained" 
+                color="primary"
+                onClick={() => window.location.hash = '#submit'}
+                sx={{ mt: 2 }}
+              >
+                Submit Training Job
+              </Button>
+            )}
+          </Box>
         )}
       </CardContent>
       <ModelComparisonDialog
