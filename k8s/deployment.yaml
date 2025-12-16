@@ -1,15 +1,200 @@
-# Namespace for all DistML resources
-apiVersion: v1
-kind: Namespace
+# Redis Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: distml
+  name: redis
+  namespace: tensorfleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: tensorfleet
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+---
+# MinIO Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: tensorfleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+      - name: minio
+        image: minio/minio:latest
+        ports:
+        - containerPort: 9000
+        - containerPort: 9001
+        env:
+        - name: MINIO_ROOT_USER
+          value: "minioadmin"
+        - name: MINIO_ROOT_PASSWORD
+          value: "minioadmin"
+        command:
+        - minio
+        - server
+        - /data
+        - --console-address
+        - ":9001"
+        volumeMounts:
+        - name: minio-data
+          mountPath: /data
+        livenessProbe:
+          httpGet:
+            path: /minio/health/live
+            port: 9000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /minio/health/ready
+            port: 9000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: minio-data
+        persistentVolumeClaim:
+          claimName: minio-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: tensorfleet
+spec:
+  selector:
+    app: minio
+  ports:
+  - name: api
+    port: 9000
+    targetPort: 9000
+  - name: console
+    port: 9001
+    targetPort: 9001
+---
+# Orchestrator Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: tensorfleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orchestrator
+  template:
+    metadata:
+      labels:
+        app: orchestrator
+    spec:
+      containers:
+      - name: orchestrator
+        image: tensorfleet/orchestrator:latest
+        ports:
+        - containerPort: 50051
+        env:
+        - name: PORT
+          value: "50051"
+        - name: REDIS_ADDR
+          value: "redis:6379"
+        livenessProbe:
+          tcpSocket:
+            port: 50051
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 50051
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator
+  namespace: tensorfleet
+spec:
+  selector:
+    app: orchestrator
+  ports:
+  - port: 50051
+    targetPort: 50051
+---
+# Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: tensorfleet
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: tensorfleet/worker:latest
+        env:
+        - name: PORT
+          value: "50052"
+        - name: ORCHESTRATOR_ADDR
+          value: "orchestrator:50051"
 ---
 # API Gateway Deployment and Service
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-gateway
-  namespace: distml
+  namespace: tensorfleet
 spec:
   replicas: 1
   selector:
@@ -22,105 +207,165 @@ spec:
     spec:
       containers:
       - name: api-gateway
-        image: your-repo/api-gateway:latest # Replace with your image
+        image: tensorfleet/api-gateway:latest
         ports:
-        - containerPort: 8000
+        - containerPort: 8080
         env:
+        - name: PORT
+          value: "8080"
+        - name: ORCHESTRATOR_ADDR
+          value: "orchestrator:50051"
         - name: JOB_ORCHESTRATOR_URL
-          value: "http://job-orchestrator.distml.svc.cluster.local:5000"
-        - name: JWT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: distml-secret
-              key: jwt-secret
+          value: "http://monitoring:8082"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: api-gateway
-  namespace: distml
+  namespace: tensorfleet
 spec:
   selector:
     app: api-gateway
   ports:
-  - port: 8000
-    targetPort: 8000
+  - port: 8080
+    targetPort: 8080
 ---
-# Job Orchestrator Deployment and Service
+# Storage Service Deployment and Service
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: job-orchestrator
-  namespace: distml
+  name: storage
+  namespace: tensorfleet
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: job-orchestrator
+      app: storage
   template:
     metadata:
       labels:
-        app: job-orchestrator
+        app: storage
     spec:
       containers:
-      - name: job-orchestrator
-        image: your-repo/job-orchestrator:latest # Replace with your image
+      - name: storage
+        image: tensorfleet/storage:latest
         ports:
-        - containerPort: 5000
+        - containerPort: 8081
         env:
-        - name: CELERY_BROKER_URL
-          value: "amqp://user:password@rabbitmq.distml.svc.cluster.local:5672/"
-        - name: MINIO_URL
-          value: "minio.distml.svc.cluster.local:9000"
-        - name: REDIS_HOST
-          value: "redis.distml.svc.cluster.local"
+        - name: PORT
+          value: "8081"
+        - name: MINIO_ENDPOINT
+          value: "minio:9000"
+        - name: MINIO_ACCESS_KEY
+          value: "minioadmin"
+        - name: MINIO_SECRET_KEY
+          value: "minioadmin"
+        - name: MINIO_SECURE
+          value: "false"
+        - name: MONGODB_URL
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: mongodb-url
+        - name: MONGODB_DB
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: mongodb-db
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: job-orchestrator
-  namespace: distml
+  name: storage
+  namespace: tensorfleet
 spec:
   selector:
-    app: job-orchestrator
+    app: storage
   ports:
-  - port: 5000
-    targetPort: 5000
+  - port: 8081
+    targetPort: 8081
 ---
-# Worker Node Deployment
+# Monitoring Service Deployment and Service
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: worker-node
-  namespace: distml
+  name: monitoring
+  namespace: tensorfleet
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
-      app: worker-node
+      app: monitoring
   template:
     metadata:
       labels:
-        app: worker-node
-      annotations:
-        prometheus.io/scrape: 'true'
-        prometheus.io/port: '8001'
+        app: monitoring
     spec:
       containers:
-      - name: worker-node
-        image: your-repo/worker-node:latest # Replace with your image
+      - name: monitoring
+        image: tensorfleet/monitoring:latest
+        ports:
+        - containerPort: 8082
         env:
-        - name: CELERY_BROKER_URL
-          value: "amqp://user:password@rabbitmq.distml.svc.cluster.local:5672/"
-        - name: MINIO_URL
-          value: "minio.distml.svc.cluster.local:9000"
+        - name: PORT
+          value: "8082"
+        - name: COMPOSE_PROJECT_NAME
+          value: "tensorfleet"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8082
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8082
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: monitoring
+  namespace: tensorfleet
+spec:
+  selector:
+    app: monitoring
+  ports:
+  - port: 8082
+    targetPort: 8082
 ---
 # Frontend Deployment and Service
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: distml
+  namespace: tensorfleet
 spec:
   replicas: 1
   selector:
@@ -133,55 +378,244 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: your-repo/frontend:latest # Replace with your image
+        image: tensorfleet/frontend:latest
         ports:
         - containerPort: 3000
+        env:
+        - name: VITE_API_URL
+          value: "http://api-gateway:8080"
+        - name: VITE_MONITORING_URL
+          value: "http://monitoring:8082"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: frontend
-  namespace: distml
+  namespace: tensorfleet
 spec:
   selector:
     app: frontend
   ports:
-  - port: 80
+  - port: 3000
     targetPort: 3000
 ---
-# Ingress to expose frontend and api-gateway
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+# Prometheus Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: distml-ingress
-  namespace: distml
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  name: prometheus
+  namespace: tensorfleet
 spec:
-  rules:
-  - http:
-      paths:
-      - path: /api(/|$)(.*)
-        pathType: Prefix
-        backend:
-          service:
-            name: api-gateway
-            port:
-              number: 8000
-      - path: /()(.*)
-        pathType: Prefix
-        backend:
-          service:
-            name: frontend
-            port:
-              number: 80
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:latest
+        ports:
+        - containerPort: 9090
+        args:
+        - '--config.file=/etc/prometheus/prometheus.yml'
+        - '--storage.tsdb.path=/prometheus'
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+        - name: prometheus-data
+          mountPath: /prometheus
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: prometheus-config
+      - name: prometheus-data
+        persistentVolumeClaim:
+          claimName: prometheus-pvc
 ---
-# Secrets
 apiVersion: v1
-kind: Secret
+kind: Service
 metadata:
-  name: distml-secret
-  namespace: distml
-type: Opaque
-data:
-  jwt-secret: YS12ZXJ5LXNlY3JldC1rZXk= # base64 encoded "a-very-secret-key"
+  name: prometheus
+  namespace: tensorfleet
+spec:
+  selector:
+    app: prometheus
+  ports:
+  - port: 9090
+    targetPort: 9090
+---
+# Grafana Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: tensorfleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: "admin"
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"
+        - name: GF_INSTALL_PLUGINS
+          value: "grafana-piechart-panel"
+        volumeMounts:
+        - name: grafana-provisioning
+          mountPath: /etc/grafana/provisioning
+        - name: grafana-data
+          mountPath: /var/lib/grafana
+      volumes:
+      - name: grafana-provisioning
+        configMap:
+          name: grafana-provisioning
+      - name: grafana-data
+        persistentVolumeClaim:
+          claimName: grafana-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: tensorfleet
+spec:
+  selector:
+    app: grafana
+  ports:
+  - port: 3001
+    targetPort: 3000
+---
+# ML Worker Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-ml
+  namespace: tensorfleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-ml
+  template:
+    metadata:
+      labels:
+        app: worker-ml
+    spec:
+      containers:
+      - name: worker-ml
+        image: tensorfleet/worker-ml:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PORT
+          value: "8000"
+        - name: MONGODB_URL
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: mongodb-url
+        - name: MONGODB_DB
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: mongodb-db
+        command: ["python", "api_server.py"]
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-ml
+  namespace: tensorfleet
+spec:
+  selector:
+    app: worker-ml
+  ports:
+  - port: 8000
+    targetPort: 8000
+---
+# Model Service Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-service
+  namespace: tensorfleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: model-service
+  template:
+    metadata:
+      labels:
+        app: model-service
+    spec:
+      containers:
+      - name: model-service
+        image: tensorfleet/model-service:latest
+        ports:
+        - containerPort: 8083
+        env:
+        - name: PORT
+          value: "8083"
+        - name: MONGODB_URL
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: mongodb-url
+        - name: MONGODB_DB
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: mongodb-db
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8083
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8083
+          initialDelaySeconds: 10
+          periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-service
+  namespace: tensorfleet
+spec:
+  selector:
+    app: model-service
+  ports:
+  - port: 8083
+    targetPort: 8083
