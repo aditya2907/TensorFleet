@@ -1,10 +1,10 @@
 # 🧠 Model Service
 
-The Model Service provides comprehensive model registry and lifecycle management for TensorFleet, offering secure model storage, metadata management, version control, and distribution capabilities with MongoDB GridFS integration.
+The Model Service provides enterprise-grade **model registry and lifecycle management** for TensorFleet, offering **semantic model naming**, secure storage, advanced metadata management, version control, and intelligent distribution capabilities with **MongoDB Atlas** and **MinIO** hybrid architecture.
 
 ## 🚀 Overview
 
-This service acts as the central model repository for TensorFleet, managing trained ML models from creation to deployment. It provides APIs for model registration, metadata management, secure downloads, versioning, and analytics with seamless integration to MongoDB for scalable storage.
+This service acts as the intelligent **MLOps model repository** for TensorFleet, managing trained ML models from creation through deployment. Features **semantic model naming** (e.g., `RandomForest_95.2%_Dec16` instead of UUIDs), **MongoDB Atlas integration** for distributed metadata storage, and **advanced model analytics** with performance tracking and comparison capabilities.
 
 ## 🏗️ Architecture
 

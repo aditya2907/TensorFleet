@@ -1,10 +1,10 @@
 # 💾 Storage Service
 
-The Storage Service provides scalable, S3-compatible object storage for TensorFleet, handling datasets, models, checkpoints, and artifacts with comprehensive file management, metadata tracking, and integration with MinIO backend storage.
+The Storage Service provides enterprise-grade, hybrid storage management for TensorFleet, combining **MinIO S3-compatible object storage** with **MongoDB Atlas** for metadata, supporting datasets, models, checkpoints, and artifacts with semantic naming and comprehensive lifecycle management.
 
 ## 🚀 Overview
 
-This service acts as the centralized storage layer for all TensorFleet assets, providing RESTful APIs for file operations, bucket management, and storage analytics. It supports both local file storage and distributed MinIO deployments with automatic failover and redundancy.
+This service acts as the intelligent storage orchestrator for all TensorFleet assets, providing RESTful APIs for hybrid data operations, advanced metadata management, and storage analytics. Features **MongoDB Atlas integration** for distributed metadata storage and **semantic model naming** for better organization and discoverability.
 
 ## 🏗️ Architecture
 

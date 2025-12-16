@@ -1,10 +1,10 @@
 # ⚡ Worker Service
 
-The Worker service is the computational backbone of TensorFleet, executing distributed ML training tasks with realistic neural network simulation, comprehensive metrics reporting, and seamless integration with the orchestrator's task scheduling system.
+The Worker service is the **high-performance computational engine** of TensorFleet, executing **distributed ML training tasks** with advanced neural network simulation, **real-time metrics reporting**, **auto-scaling capabilities**, and seamless **gRPC integration** with the orchestrator's intelligent scheduling system.
 
 ## 🚀 Overview
 
-Workers are the distributed compute nodes that perform the actual machine learning training workloads. Each worker registers with the orchestrator, receives training tasks, simulates realistic ML training with convergence patterns, and reports progress and metrics back to the system.
+Workers are the **elastic compute nodes** that perform intensive machine learning training workloads in a distributed fashion. Each worker **auto-registers** with the orchestrator, receives **algorithm-specific training tasks**, executes **realistic ML simulations** with convergence patterns, and provides **comprehensive telemetry** back to the monitoring systems for performance optimization and auto-scaling decisions.
 
 ## 🏗️ Architecture
 

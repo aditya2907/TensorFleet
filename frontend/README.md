@@ -1,20 +1,35 @@
 # 🎨 TensorFleet Frontend
 
-Modern, responsive React dashboard for managing and monitoring distributed ML training jobs in the TensorFleet platform. Built with Vite, Material-UI, and real-time data visualization capabilities.
+Modern, responsive React dashboard for managing and monitoring distributed ML training jobs in the TensorFleet platform. Built with **Vite**, **Material-UI v5**, and advanced data visualization with semantic model registry and enhanced UX.
 
 ## 🚀 Overview
 
-The TensorFleet frontend provides an intuitive web interface for users to submit ML training jobs, monitor worker activity, track job progress, and visualize training metrics in real-time. It communicates with the API Gateway via REST APIs to provide a seamless user experience.
+The TensorFleet frontend provides an intuitive, professional web interface for ML engineers and data scientists to submit training jobs, monitor distributed workers, track job progress, and manage model registry with clean semantic naming. Features real-time updates, MongoDB Atlas integration, and enhanced model comparison capabilities.
 
 ## ✨ Key Features
 
-- **🎯 Job Management**: Submit, monitor, and manage ML training jobs
-- **📊 Real-time Dashboard**: Live worker activity and resource monitoring
-- **📈 Training Metrics**: Interactive charts for loss/accuracy tracking
-- **⚡ Fast Performance**: Built with Vite for lightning-fast development
-- **🎨 Modern UI**: Material-UI components with responsive design
-- **� Auto-refresh**: Real-time updates without manual refresh
-- **� Mobile Responsive**: Optimized for desktop, tablet, and mobile
+### 🎯 **Enhanced Job Management**
+- **Smart Job Submission**: Multi-algorithm support with parameter validation
+- **Real-time Progress**: Live training metrics with loss/accuracy visualization  
+- **Job Comparison**: Side-by-side performance analysis
+
+### 📦 **Semantic Model Registry**
+- **Clean Model Names**: Display names like `RandomForest_95.2%_Dec16` instead of UUIDs
+- **Model Comparison**: Interactive model performance comparison
+- **Smart Search**: Search by algorithm, performance, or semantic names
+- **Download Management**: Clean filenames for model artifacts
+
+### 📊 **Advanced Monitoring**
+- **Real-time Dashboard**: Live worker activity and resource monitoring
+- **Performance Analytics**: Interactive charts with Recharts integration
+- **Auto-scaling Visualization**: Dynamic worker scaling indicators
+- **Health Monitoring**: Service health checks with status indicators
+
+### 🎨 **Modern UX/UI**
+- **Material-UI v5**: Latest design system with enhanced theming
+- **Responsive Design**: Optimized for desktop, tablet, and mobile devices
+- **Dark/Light Theme**: User preference-based theme switching
+- **Progressive Loading**: Skeleton loaders and optimized performance
 
 ## 🏗️ Architecture
 

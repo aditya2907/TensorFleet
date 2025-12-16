@@ -1,10 +1,10 @@
 # 🎯 Orchestrator Service
 
-The Orchestrator is the central coordination engine of TensorFleet, responsible for intelligent job scheduling, task distribution, worker management, and real-time progress tracking across the distributed ML training platform.
+The Orchestrator is the **intelligent coordination engine** of TensorFleet, responsible for **AI-powered job scheduling**, dynamic task distribution, **auto-scaling worker management**, and real-time progress tracking across the distributed ML training platform with **MongoDB Atlas** integration.
 
 ## 🚀 Overview
 
-This service acts as the "brain" of TensorFleet, orchestrating the entire distributed machine learning workflow. Built with Go and gRPC, it provides high-performance coordination between the API Gateway and worker nodes, ensuring optimal resource utilization and fault-tolerant job execution.
+This service acts as the **distributed intelligence hub** of TensorFleet, orchestrating complex ML workflows with advanced scheduling algorithms. Built with **Go 1.21+** and **high-performance gRPC**, it provides enterprise-grade coordination between API Gateway and worker pools, featuring **automatic scaling**, **fault recovery**, and **semantic job management** for optimal resource utilization.
 
 ## 🏗️ Architecture
 

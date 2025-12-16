@@ -1,16 +1,23 @@
-# Job Orchestrator Service
+# 🔄 Job Orchestrator Service
 
-The Job Orchestrator is a Python-based service that provides advanced job management, queue processing, and workflow orchestration capabilities for the TensorFleet platform.
+The Job Orchestrator is an **enterprise-grade Python service** that provides **intelligent job management**, advanced queue processing, **ML workflow orchestration**, and **semantic job naming** capabilities for the TensorFleet distributed platform with **MongoDB Atlas** integration.
 
-## 🏗️ Architecture  
+## 🏗️ Enhanced Architecture  
 
-The Job Orchestrator provides high-level job management:
-- **Job Lifecycle Management**: Complete job state management and transitions
-- **Advanced Queuing**: Priority-based job queuing and scheduling  
-- **Workflow Orchestration**: Complex multi-step job workflows
-- **Resource Allocation**: Intelligent resource planning and allocation
-- **Job Templates**: Predefined job templates for common ML tasks
-- **Batch Processing**: Support for batch job submission and processing
+The Job Orchestrator provides **AI-powered job lifecycle management**:
+
+### 🎯 **Core Capabilities**
+- **Intelligent Job Lifecycle**: ML-aware state management and automatic transitions
+- **Smart Queuing**: ML workload-optimized priority queuing and resource-aware scheduling  
+- **Semantic Job Management**: Clean job naming and enhanced metadata tracking
+- **Advanced Workflow Orchestration**: Complex multi-stage ML pipelines with conditional execution
+- **Auto-scaling Resource Allocation**: Dynamic resource planning based on job requirements
+- **MongoDB Atlas Integration**: Distributed job metadata storage and analytics
+
+### 🚀 **ML-Optimized Features**
+- **ML Job Templates**: Predefined configurations for common ML training patterns
+- **Batch ML Processing**: Efficient batch submission for hyperparameter tuning
+- **Model-aware Scheduling**: Algorithm-specific resource allocation and optimization
 
 ## ✨ Features
 

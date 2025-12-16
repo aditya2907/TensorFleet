@@ -1,27 +1,43 @@
-# ML Worker Service
+# 🤖 ML Worker Service
 
-The ML Worker service provides machine learning training capabilities with MongoDB integration, supporting multiple algorithms and real dataset processing for the TensorFleet platform.
+The ML Worker service provides advanced machine learning training capabilities with **MongoDB Atlas integration**, supporting multiple algorithms, semantic model naming, and real dataset processing for the TensorFleet distributed platform.
 
 ## 🏗️ Architecture
 
-The ML Worker serves as the specialized ML computation node:
-- **Dataset Management**: Fetches datasets from MongoDB collections
-- **Model Training**: Trains ML models using scikit-learn algorithms  
-- **Model Persistence**: Saves trained models to MongoDB GridFS
-- **Metadata Management**: Stores model metadata with versioning
-- **API Server**: Flask REST API for training job submission
-- **Metrics Export**: Prometheus metrics for monitoring
+The ML Worker serves as the specialized ML computation node with enhanced capabilities:
 
-## ✨ Features
+### 🔄 **Core Services**
+- **Smart Dataset Management**: Fetches datasets from MongoDB Atlas with caching
+- **Multi-Algorithm Training**: Scikit-learn, TensorFlow, PyTorch model support
+- **Semantic Model Naming**: Clean, descriptive model names instead of UUIDs
+- **Intelligent Model Persistence**: MinIO + MongoDB Atlas hybrid storage
+- **Advanced Metadata Management**: Rich model metadata with performance tracking
+- **RESTful API Server**: Flask-based API for job submission and monitoring
 
-- **Multiple Algorithms**: RandomForest, LogisticRegression, SVM, DecisionTree
-- **MongoDB Integration**: Dataset storage and model persistence
-- **GridFS Storage**: Large model file storage in MongoDB
-- **Model Versioning**: Automatic version management
-- **REST API**: Easy integration with other services
-- **Prometheus Metrics**: Training progress and performance monitoring
-- **Health Checks**: Service availability monitoring
-- **Data Preprocessing**: Automatic feature scaling and encoding
+### ☁️ **Cloud Integration** 
+- **MongoDB Atlas**: Cloud-native database with auto-scaling
+- **MinIO S3**: Distributed object storage for model artifacts
+- **Prometheus Metrics**: Advanced monitoring and alerting
+
+## ✨ Enhanced Features
+
+### 🧠 **Machine Learning Capabilities**
+- **Algorithms**: RandomForest, LogisticRegression, SVM, DecisionTree, Neural Networks
+- **Deep Learning**: TensorFlow/Keras integration for DNN, CNN models
+- **AutoML**: Hyperparameter optimization with grid search
+- **Model Evaluation**: Comprehensive metrics (accuracy, precision, recall, F1)
+
+### 📦 **Data & Storage**
+- **MongoDB Atlas**: Distributed dataset storage with real-time sync
+- **MinIO Integration**: S3-compatible object storage for large model files
+- **Semantic Naming**: Models named as `JobName_Algorithm_Dataset_Timestamp`
+- **Version Control**: Automatic model versioning with rollback capabilities
+
+### 📊 **Monitoring & Observability**
+- **Real-time Metrics**: Training progress, resource usage, performance
+- **Health Monitoring**: Service availability and database connectivity
+- **Performance Analytics**: Model comparison and benchmark tracking
+- **Distributed Logging**: Structured logging with correlation IDs
 
 ## 📦 Technologies
 

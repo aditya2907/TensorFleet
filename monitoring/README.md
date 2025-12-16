@@ -1,10 +1,10 @@
 # 📊 Monitoring Service
 
-The Monitoring Service is the observability and analytics hub of TensorFleet, providing comprehensive metrics aggregation, health monitoring, performance analytics, and real-time system insights with Prometheus and Grafana integration.
+The Monitoring Service is the advanced observability and analytics engine of TensorFleet, providing **real-time metrics aggregation**, **intelligent health monitoring**, **auto-scaling analytics**, and comprehensive system insights with **Prometheus**, **Grafana**, and **MongoDB Atlas** integration.
 
 ## 🚀 Overview
 
-This service acts as the central observability platform, collecting metrics from all TensorFleet services, providing health checks, analytics dashboards, and alerting capabilities. It offers both fallback monitoring when services are unavailable and comprehensive system-wide visibility.
+This service acts as the central AI-powered observability platform, collecting and analyzing metrics from all TensorFleet microservices, providing proactive health monitoring, auto-scaling recommendations, and advanced analytics dashboards. Features **cloud-native monitoring** with MongoDB Atlas integration and **intelligent alerting** for production deployments.
 
 ## 🏗️ Architecture
 

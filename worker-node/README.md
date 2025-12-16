@@ -1,6 +1,6 @@
 # Worker Node Service
 
-The Worker Node service provides additional Python-based worker capabilities for specialized ML tasks, data processing, and integration with external services in the TensorFleet platform.
+The Worker Node service provides additional Python-based worker capabilities for specialized ML tasks, data processing, and integration with external services in the TensorFleet platform. Features MongoDB Atlas cloud integration and supports semantic model naming for enhanced model management.
 
 ## 🏗️ Architecture
 
@@ -15,17 +15,22 @@ The Worker Node complements the main Go-based workers:
 ## ✨ Features
 
 - **Python Ecosystem**: Access to extensive Python ML/data libraries
+- **MongoDB Atlas Integration**: Cloud database connectivity for metadata management
+- **Semantic Model Naming**: Intelligent naming system (e.g., "RandomForest_95.2%_Dec16")
 - **Async Task Processing**: Celery-based distributed task execution
 - **Custom Algorithm Support**: Run user-defined Python algorithms
 - **Data Processing**: ETL pipelines and data transformation
 - **External API Integration**: Connect to external ML services
 - **Plugin Architecture**: Extensible functionality through plugins
+- **Hybrid Storage**: MinIO for files, MongoDB Atlas for metadata
 - **Resource Monitoring**: CPU, memory, and task tracking
 - **Health Monitoring**: Service availability and performance tracking
 
 ## 📦 Technologies
 
 - **Language**: Python 3.11+
+- **Database**: MongoDB Atlas (cloud-hosted)
+- **Storage**: MinIO (S3-compatible object storage)
 - **Task Queue**: Celery with Redis backend
 - **ML Libraries**: scikit-learn, pandas, numpy
 - **Data Processing**: pandas, numpy, scipy

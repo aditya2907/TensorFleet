@@ -1,10 +1,16 @@
 # 🌐 API Gateway Service
 
-The API Gateway is the main entry point for the TensorFleet distributed ML training platform. It provides a RESTful HTTP interface that communicates with backend services via gRPC, handles authentication, job management, and real-time worker monitoring.
+The API Gateway is the central entry point for the TensorFleet distributed ML training platform. It provides a unified RESTful HTTP interface that communicates with backend microservices via gRPC, handles authentication, job orchestration, and real-time monitoring with support for MongoDB Atlas and semantic model naming.
 
 ## 🚀 Overview
 
-This service is built with Go and Gin framework, serving as the bridge between the React frontend and the gRPC-based backend services. It provides comprehensive APIs for job lifecycle management, worker monitoring, and system health checks.
+Built with **Go 1.21+** and **Gin framework**, this service acts as the intelligent proxy between the React frontend and distributed gRPC backend services. It provides comprehensive APIs for ML job lifecycle management, worker scaling, real-time monitoring, and integrates with MongoDB Atlas for persistent data storage.
+
+### ✨ Recent Updates (Dec 2025)
+- **MongoDB Atlas Integration**: Full cloud database support
+- **Semantic Model Naming**: Clean, readable model names instead of UUID-based naming
+- **Enhanced Job Management**: Improved job submission with better error handling
+- **Real-time Worker Scaling**: Dynamic worker management with auto-scaling capabilities
 
 ## 🏗️ Architecture
 
