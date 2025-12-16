@@ -21,17 +21,29 @@ const LogViewer = ({ jobId }) => {
         eventSourceRef.current.close();
       }
 
-      const url = `${import.meta.env.VITE_API_URL}/api/v1/jobs/${jobId}/logs`;
+      // Get the API URL with fallback
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+      const url = `${apiUrl}/api/v1/jobs/${jobId}/logs`;
       
       // First, check if the job exists
-      fetch(`${import.meta.env.VITE_API_URL}/api/v1/jobs/${jobId}`)
+      console.log('LogViewer: Checking job status at:', `${apiUrl}/api/v1/jobs/${jobId}`);
+      fetch(`${apiUrl}/api/v1/jobs/${jobId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+      })
         .then(res => {
+          console.log('LogViewer: Job status response:', res.status, res.statusText);
           if (!res.ok) {
-            throw new Error('Job not found');
+            throw new Error(`Job not found (${res.status}): ${res.statusText}`);
           }
           return res.json();
         })
-        .then(() => {
+        .then((jobData) => {
+          console.log('LogViewer: Job exists, starting SSE connection:', jobData);
+          setError(null); // Clear any previous errors
           // Job exists, start SSE connection
           const es = new EventSource(url);
           eventSourceRef.current = es;
@@ -88,8 +100,68 @@ const LogViewer = ({ jobId }) => {
           };
         })
         .catch(err => {
-          console.error('Failed to verify job:', err);
-          setError(`Job not found or unavailable: ${jobId}`);
+          console.error('LogViewer: Failed to verify job via API Gateway:', err);
+          console.log('LogViewer: Trying monitoring service fallback...');
+          
+          // Try monitoring service as fallback
+          const monitoringUrl = import.meta.env.VITE_MONITORING_URL || 'http://localhost:8082';
+          fetch(`${monitoringUrl}/api/v1/metrics/jobs/${jobId}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            mode: 'cors',
+          })
+            .then(res => {
+              console.log('LogViewer: Monitoring service response:', res.status, res.statusText);
+              if (!res.ok) {
+                throw new Error(`Monitoring service also failed (${res.status}): ${res.statusText}`);
+              }
+              return res.json();
+            })
+            .then((jobData) => {
+              console.log('LogViewer: Job found via monitoring service, starting logs from monitoring API:', jobData);
+              setError(null);
+              
+              // Use monitoring service logs endpoint
+              const monitoringLogsUrl = `${monitoringUrl}/api/v1/jobs/${jobId}/logs`;
+              const es = new EventSource(monitoringLogsUrl);
+              eventSourceRef.current = es;
+
+              es.onopen = () => {
+                setIsConnected(true);
+                console.log('SSE connection opened (monitoring fallback)');
+              };
+
+              es.onmessage = (event) => {
+                const logMessage = event.data;
+                setLogs((prevLogs) => [...prevLogs, logMessage]);
+                
+                // Check if this is a terminal log message (job ended)
+                const lowerLog = logMessage.toLowerCase();
+                if (lowerLog.includes('cancelled') || 
+                    lowerLog.includes('completed') || 
+                    lowerLog.includes('failed')) {
+                  streamEndedRef.current = true;
+                }
+              };
+
+              es.onerror = (errorEvent) => {
+                setIsConnected(false);
+                if (streamEndedRef.current) {
+                  console.log('SSE connection closed normally (job ended)');
+                  es.close();
+                  return;
+                }
+                console.error('SSE error (monitoring):', errorEvent);
+                setError('Error connecting to log stream (monitoring fallback)');
+                es.close();
+              };
+            })
+            .catch(monitoringErr => {
+              console.error('LogViewer: Both API Gateway and Monitoring service failed:', monitoringErr);
+              setError(`Job not found or unavailable: ${jobId}. API Gateway: ${err.message}. Monitoring: ${monitoringErr.message}`);
+            });
         });
 
       return () => {

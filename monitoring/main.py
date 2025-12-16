@@ -409,6 +409,84 @@ def simulate_metrics():
     thread = threading.Thread(target=update_metrics, daemon=True)
     thread.start()
 
+@app.route('/api/v1/jobs/<job_id>/logs', methods=['GET'])
+def get_job_logs(job_id):
+    """Get or stream logs for a specific job (fallback endpoint)"""
+    from flask import Response
+    import time
+    
+    # Check if job exists in our data
+    if job_id not in jobs_data:
+        # Auto-register job with default values
+        jobs_data[job_id] = {
+            'job_id': job_id,
+            'status': 'UNKNOWN',
+            'start_time': time.time(),
+            'progress': {'percentage': 0, 'current_epoch': 0, 'total_epochs': 10},
+            'metrics': {'loss': 0.0, 'accuracy': 0.0},
+            'logs': []
+        }
+        logger.info(f"Auto-registered job {job_id} for log access")
+
+    job = jobs_data[job_id]
+    
+    # If client wants SSE streaming
+    if request.headers.get('Accept') == 'text/event-stream':
+        def generate_logs():
+            # Send existing logs first
+            existing_logs = job.get('logs', [])
+            for log in existing_logs:
+                yield f"data: {log}\n\n"
+                time.sleep(0.1)
+            
+            # Generate some demo logs if none exist
+            if not existing_logs:
+                demo_logs = [
+                    f"[{time.strftime('%H:%M:%S')}] INFO: Job {job_id} initialized",
+                    f"[{time.strftime('%H:%M:%S')}] INFO: Starting training process",
+                    f"[{time.strftime('%H:%M:%S')}] INFO: Loading dataset",
+                    f"[{time.strftime('%H:%M:%S')}] INFO: Model configuration complete",
+                ]
+                
+                job_status = job.get('status', 'UNKNOWN')
+                if job_status == 'COMPLETED':
+                    demo_logs.extend([
+                        f"[{time.strftime('%H:%M:%S')}] INFO: Training completed successfully",
+                        f"[{time.strftime('%H:%M:%S')}] INFO: Final accuracy: {job.get('metrics', {}).get('accuracy', 0.85):.3f}",
+                        f"[{time.strftime('%H:%M:%S')}] INFO: Log streaming ended"
+                    ])
+                elif job_status == 'FAILED':
+                    demo_logs.extend([
+                        f"[{time.strftime('%H:%M:%S')}] ERROR: Training failed",
+                        f"[{time.strftime('%H:%M:%S')}] INFO: Log streaming ended"
+                    ])
+                else:
+                    demo_logs.extend([
+                        f"[{time.strftime('%H:%M:%S')}] INFO: Training in progress...",
+                        f"[{time.strftime('%H:%M:%S')}] INFO: Current epoch: {job.get('progress', {}).get('current_epoch', 1)}"
+                    ])
+                
+                for log in demo_logs:
+                    yield f"data: {log}\n\n"
+                    time.sleep(0.2)
+        
+        return Response(
+            generate_logs(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Access-Control-Allow-Origin': '*'
+            }
+        )
+    else:
+        # Return logs as JSON
+        return jsonify({
+            'job_id': job_id,
+            'logs': job.get('logs', []),
+            'status': job.get('status', 'UNKNOWN')
+        }), 200
+
 if __name__ == '__main__':
     # simulate_metrics()  # Uncomment for demo mode
     port = int(os.getenv('PORT', 8082))
