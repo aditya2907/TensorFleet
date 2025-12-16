@@ -11,7 +11,6 @@ import (
 	"os"
 	"sync"
 	"time"
-
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"

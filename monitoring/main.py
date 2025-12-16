@@ -5,6 +5,9 @@ import os
 import logging
 import random
 import time
+import subprocess
+import threading
+import docker
 
 app = Flask(__name__)
 
@@ -29,10 +32,20 @@ active_workers = Gauge('tensorfleet_active_workers', 'Number of active worker no
 task_duration = Histogram('tensorfleet_task_duration_seconds', 'Task execution duration')
 training_loss = Gauge('tensorfleet_training_loss', 'Current training loss', ['job_id'])
 training_accuracy = Gauge('tensorfleet_training_accuracy', 'Current training accuracy', ['job_id'])
+desired_workers = Gauge('tensorfleet_desired_workers', 'Desired number of worker nodes')
 
 # Mock data for demonstration
 jobs_data = {}
 workers_data = {}
+scaling_config = {
+    'current_workers': 3,
+    'desired_workers': 3,
+    'min_workers': 1,
+    'max_workers': 10,
+    'auto_scale_enabled': True,
+    'scale_down_threshold': 0.3,  # Scale down if utilization < 30%
+    'scale_up_threshold': 0.8,    # Scale up if utilization > 80%
+}
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -223,6 +236,163 @@ def get_worker_activity():
         'busy_workers': len([w for w in workers_list if w['status'] == 'BUSY']),
         'timestamp': current_time
     }), 200
+
+@app.route('/api/v1/scaling/config', methods=['GET'])
+def get_scaling_config():
+    """Get current scaling configuration"""
+    return jsonify(scaling_config), 200
+
+@app.route('/api/v1/scaling/config', methods=['POST'])
+def update_scaling_config():
+    """Update scaling configuration"""
+    data = request.get_json()
+    
+    # Update scaling configuration with new values
+    for key, value in data.items():
+        if key in scaling_config:
+            scaling_config[key] = value
+    
+    return jsonify({'message': 'Scaling configuration updated', 'config': scaling_config}), 200
+
+@app.route('/api/v1/scaling/workers', methods=['POST'])
+def scale_workers():
+    """Scale workers to a specific count"""
+    data = request.get_json()
+    target_count = data.get('worker_count', scaling_config['desired_workers'])
+    
+    # Validate worker count
+    if target_count < scaling_config['min_workers']:
+        return jsonify({'error': f'Worker count must be at least {scaling_config["min_workers"]}'}), 400
+    
+    if target_count > scaling_config['max_workers']:
+        return jsonify({'error': f'Worker count cannot exceed {scaling_config["max_workers"]}'}), 400
+    
+    # Update desired workers
+    old_count = scaling_config['desired_workers']
+    scaling_config['desired_workers'] = target_count
+    
+    # Use docker-compose command to scale workers
+    try:
+        # Use subprocess to call docker compose scale command
+        compose_file_path = '/app/docker-compose.yml'
+        
+        # Build the docker compose command
+        cmd = [
+            'docker', 'compose',
+            '-f', compose_file_path,
+            'up', '-d',
+            '--scale', f'worker={target_count}',
+            '--no-recreate'
+        ]
+        
+        logger.info(f"Executing scaling command: {' '.join(cmd)}")
+        
+        # Execute the command
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout
+            logger.error(f"Failed to scale workers: {error_msg}")
+            return jsonify({'error': f'Failed to scale workers: {error_msg}'}), 500
+        
+        scaling_config['current_workers'] = target_count
+        desired_workers.set(target_count)
+        active_workers.set(target_count)
+        
+        logger.info(f"✅ Successfully scaled workers from {old_count} to {target_count}")
+        return jsonify({
+            'message': f'Successfully scaled workers to {target_count}',
+            'old_count': old_count,
+            'new_count': target_count
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error scaling workers: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/scaling/scale-up', methods=['POST'])
+def scale_up_workers():
+    """Scale up workers by 1"""
+    target_count = min(scaling_config['desired_workers'] + 1, scaling_config['max_workers'])
+    return scale_workers_internal(target_count)
+
+@app.route('/api/v1/scaling/scale-down', methods=['POST'])
+def scale_down_workers():
+    """Scale down workers by 1"""
+    target_count = max(scaling_config['desired_workers'] - 1, scaling_config['min_workers'])
+    return scale_workers_internal(target_count)
+
+def scale_workers_internal(target_count):
+    """Internal function to scale workers"""
+    from flask import jsonify
+    return scale_workers(), 200 if scale_workers().status_code == 200 else scale_workers().status_code
+
+@app.route('/api/v1/scaling/auto-shrink', methods=['POST'])
+def enable_auto_shrink():
+    """Enable automatic shrinking of workers when jobs complete"""
+    data = request.get_json() or {}
+    enabled = data.get('enabled', True)
+    
+    scaling_config['auto_scale_enabled'] = enabled
+    
+    if enabled:
+        # Start auto-shrink monitoring thread
+        threading.Thread(target=monitor_and_shrink, daemon=True).start()
+        return jsonify({'message': 'Auto-shrink enabled', 'config': scaling_config}), 200
+    else:
+        return jsonify({'message': 'Auto-shrink disabled', 'config': scaling_config}), 200
+
+def monitor_and_shrink():
+    """Monitor worker utilization and shrink when idle"""
+    logger.info("🔄 Auto-shrink monitoring started")
+    
+    while scaling_config.get('auto_scale_enabled', False):
+        try:
+            # Calculate worker utilization
+            total_workers = len(workers_data)
+            busy_workers = len([w for w in workers_data.values() if w.get('status') == 'BUSY'])
+            
+            if total_workers > 0:
+                utilization = busy_workers / total_workers
+                
+                # Scale down if utilization is low and we have more than min workers
+                if utilization < scaling_config['scale_down_threshold'] and scaling_config['current_workers'] > scaling_config['min_workers']:
+                    new_count = max(scaling_config['current_workers'] - 1, scaling_config['min_workers'])
+                    logger.info(f"📉 Low utilization ({utilization:.1%}), scaling down to {new_count} workers")
+                    
+                    # Execute scale down
+                    subprocess.run(
+                        ['docker', 'compose', 'up', '-d', '--scale', f'worker={new_count}', '--no-recreate'],
+                        capture_output=True,
+                        timeout=30
+                    )
+                    scaling_config['current_workers'] = new_count
+                    scaling_config['desired_workers'] = new_count
+                
+                # Scale up if utilization is high and we haven't reached max workers
+                elif utilization > scaling_config['scale_up_threshold'] and scaling_config['current_workers'] < scaling_config['max_workers']:
+                    new_count = min(scaling_config['current_workers'] + 1, scaling_config['max_workers'])
+                    logger.info(f"📈 High utilization ({utilization:.1%}), scaling up to {new_count} workers")
+                    
+                    # Execute scale up
+                    subprocess.run(
+                        ['docker', 'compose', 'up', '-d', '--scale', f'worker={new_count}', '--no-recreate'],
+                        capture_output=True,
+                        timeout=30
+                    )
+                    scaling_config['current_workers'] = new_count
+                    scaling_config['desired_workers'] = new_count
+            
+            time.sleep(10)  # Check every 10 seconds
+            
+        except Exception as e:
+            logger.error(f"Error in auto-shrink monitor: {str(e)}")
+            time.sleep(10)
 
 def simulate_metrics():
     """Simulate some metrics for demonstration"""

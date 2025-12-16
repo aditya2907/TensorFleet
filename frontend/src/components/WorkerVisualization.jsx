@@ -51,12 +51,24 @@ const WorkerVisualization = () => {
       const response = await monitoringAPI.getWorkerActivity();
       const workersData = response.data.workers || [];
       setWorkers(workersData);
+      
+      // Calculate average resource usage
+      const activeWorkers = workersData.filter(w => w.is_active);
+      const avgCpu = activeWorkers.length > 0 
+        ? Math.round(activeWorkers.reduce((sum, w) => sum + (w.cpu_usage || 0), 0) / activeWorkers.length)
+        : 0;
+      const avgMemory = activeWorkers.length > 0
+        ? Math.round(activeWorkers.reduce((sum, w) => sum + (w.memory_usage || 0), 0) / activeWorkers.length)
+        : 0;
+      
       setWorkerStats({
         total: response.data.total_workers || workersData.length,
         active: response.data.active_workers || workersData.filter(w => w.is_active).length,
         busy: response.data.busy_workers || workersData.filter(w => w.status === 'BUSY').length,
         idle: workersData.filter(w => w.status === 'IDLE').length,
-        offline: workersData.filter(w => w.status === 'OFFLINE').length
+        offline: workersData.filter(w => w.status === 'OFFLINE').length,
+        avgCpu,
+        avgMemory
       });
       setLoading(false);
     } catch (error) {
@@ -153,63 +165,75 @@ const WorkerVisualization = () => {
 
       {/* Summary Stats Row */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2.4}>
           <Card>
             <CardContent sx={{ textAlign: 'center' }}>
               <Badge badgeContent={workerStats.total} color="primary">
                 <ComputerIcon sx={{ fontSize: 40, color: 'primary.main' }} />
               </Badge>
-              <Typography variant="h6" sx={{ mt: 1 }}>Total Workers</Typography>
+              <Typography variant="h6" sx={{ mt: 1 }}>Total</Typography>
               <Typography variant="caption" color="textSecondary">
-                Registered in system
+                Workers
               </Typography>
             </CardContent>
           </Card>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2.4}>
           <Card>
             <CardContent sx={{ textAlign: 'center' }}>
               <Badge badgeContent={workerStats.busy} color="success">
                 <SpeedIcon sx={{ fontSize: 40, color: 'success.main' }} />
               </Badge>
               <Typography variant="h6" sx={{ mt: 1, color: 'success.main' }}>
-                Busy Workers
+                Busy
               </Typography>
               <Typography variant="caption" color="textSecondary">
-                Processing tasks
+                Processing
               </Typography>
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2.4}>
           <Card>
             <CardContent sx={{ textAlign: 'center' }}>
               <Badge badgeContent={workerStats.idle} color="warning">
                 <ScheduleIcon sx={{ fontSize: 40, color: 'warning.main' }} />
               </Badge>
               <Typography variant="h6" sx={{ mt: 1, color: 'warning.main' }}>
-                Idle Workers
+                Idle
               </Typography>
               <Typography variant="caption" color="textSecondary">
-                Available for tasks
+                Available
               </Typography>
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2.4}>
           <Card>
             <CardContent sx={{ textAlign: 'center' }}>
-              <Badge badgeContent={workerStats.offline || 0} color="error">
-                <CircleIcon sx={{ fontSize: 40, color: 'error.main' }} />
-              </Badge>
-              <Typography variant="h6" sx={{ mt: 1, color: 'error.main' }}>
-                Offline
+              <CpuIcon sx={{ fontSize: 40, color: 'info.main' }} />
+              <Typography variant="h6" sx={{ mt: 1, color: 'info.main' }}>
+                {workerStats.avgCpu || 0}%
               </Typography>
               <Typography variant="caption" color="textSecondary">
-                Not responding
+                Avg CPU
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={2.4}>
+          <Card>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <MemoryIcon sx={{ fontSize: 40, color: 'secondary.main' }} />
+              <Typography variant="h6" sx={{ mt: 1, color: 'secondary.main' }}>
+                {workerStats.avgMemory || 0}%
+              </Typography>
+              <Typography variant="caption" color="textSecondary">
+                Avg Memory
               </Typography>
             </CardContent>
           </Card>
@@ -285,21 +309,64 @@ const WorkerVisualization = () => {
                       primary="Resources" 
                       secondary={
                         <Box>
-                          <Typography variant="caption" component="div">
-                            CPU: {worker.cpu_usage || 0}%
-                          </Typography>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                            <Typography variant="caption" component="div">
+                              CPU
+                            </Typography>
+                            <Typography 
+                              variant="caption" 
+                              component="div" 
+                              sx={{ 
+                                fontWeight: 'bold',
+                                color: (worker.cpu_usage || 0) > 80 ? 'error.main' : 
+                                       (worker.cpu_usage || 0) > 60 ? 'warning.main' : 'success.main'
+                              }}
+                            >
+                              {worker.cpu_usage || 0}%
+                            </Typography>
+                          </Box>
                           <LinearProgress 
                             variant="determinate" 
                             value={worker.cpu_usage || 0} 
-                            sx={{ height: 4, borderRadius: 2, mb: 0.5 }}
+                            sx={{ 
+                              height: 6, 
+                              borderRadius: 3, 
+                              mb: 1,
+                              bgcolor: 'grey.200',
+                              '& .MuiLinearProgress-bar': {
+                                bgcolor: (worker.cpu_usage || 0) > 80 ? 'error.main' : 
+                                         (worker.cpu_usage || 0) > 60 ? 'warning.main' : 'success.main'
+                              }
+                            }}
                           />
-                          <Typography variant="caption" component="div">
-                            Memory: {worker.memory_usage || 0}%
-                          </Typography>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                            <Typography variant="caption" component="div">
+                              Memory
+                            </Typography>
+                            <Typography 
+                              variant="caption" 
+                              component="div" 
+                              sx={{ 
+                                fontWeight: 'bold',
+                                color: (worker.memory_usage || 0) > 80 ? 'error.main' : 
+                                       (worker.memory_usage || 0) > 60 ? 'warning.main' : 'success.main'
+                              }}
+                            >
+                              {worker.memory_usage || 0}%
+                            </Typography>
+                          </Box>
                           <LinearProgress 
                             variant="determinate" 
                             value={worker.memory_usage || 0} 
-                            sx={{ height: 4, borderRadius: 2 }}
+                            sx={{ 
+                              height: 6, 
+                              borderRadius: 3,
+                              bgcolor: 'grey.200',
+                              '& .MuiLinearProgress-bar': {
+                                bgcolor: (worker.memory_usage || 0) > 80 ? 'error.main' : 
+                                         (worker.memory_usage || 0) > 60 ? 'warning.main' : 'success.main'
+                              }
+                            }}
                           />
                         </Box>
                       }

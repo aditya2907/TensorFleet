@@ -73,6 +73,8 @@ export const modelServiceAPI = {
 export const storageAPI = {
   // Datasets
   listDatasets: () => storageClient.get('/api/v1/list/datasets'),
+  getDatasets: () => storageClient.get('/api/v1/datasets'), // MongoDB metadata
+  getDatasetsFromMinIO: () => storageClient.get('/api/v1/list/datasets'), // MinIO files
   uploadDataset: (file, onUploadProgress) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -128,7 +130,7 @@ export const storageAPI = {
   getRecentJobs: (limit = 50) => storageClient.get(`/api/v1/jobs/recent?limit=${limit}`),
   
   createDataset: (datasetData) => storageClient.post('/api/v1/datasets', datasetData),
-  getDatasets: () => storageClient.get('/api/v1/datasets'),
+  // getDatasets is already defined above
   
   createCheckpoint: (checkpointData) => storageClient.post('/api/v1/checkpoints', checkpointData),
   getCheckpoints: (jobId) => storageClient.get(`/api/v1/checkpoints/${jobId}`),
@@ -142,11 +144,22 @@ export const storageAPI = {
 
 // Monitoring API
 export const monitoringAPI = {
+  // Dashboard and Metrics
   getDashboard: () => monitoringClient.get('/api/v1/dashboard'),
   getJobMetrics: () => monitoringClient.get('/api/v1/metrics/jobs'),
   getWorkerMetrics: () => monitoringClient.get('/api/v1/metrics/workers'),
   getJobDetails: (jobId) => monitoringClient.get(`/api/v1/metrics/jobs/${jobId}`),
   getWorkerActivity: () => apiClient.get('/worker-activity'),
+  
+  // Worker Scaling API
+  get: (endpoint) => monitoringClient.get(endpoint),
+  post: (endpoint, data) => monitoringClient.post(endpoint, data),
+  scaleWorkers: (workerCount) => monitoringClient.post('/api/v1/scaling/workers', { worker_count: workerCount }),
+  scaleUp: () => monitoringClient.post('/api/v1/scaling/scale-up'),
+  scaleDown: () => monitoringClient.post('/api/v1/scaling/scale-down'),
+  getScalingConfig: () => monitoringClient.get('/api/v1/scaling/config'),
+  updateScalingConfig: (config) => monitoringClient.post('/api/v1/scaling/config', config),
+  enableAutoShrink: (enabled) => monitoringClient.post('/api/v1/scaling/auto-shrink', { enabled }),
 };
 
 // Health Check API

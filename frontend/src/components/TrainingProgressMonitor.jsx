@@ -33,9 +33,14 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
 
   // Helper function to generate model name using the new naming convention
   const generateModelName = (job) => {
+    if (!job) return 'model';
+    
+    const jobName = job.job_name || job.name || 'training';
+    const algorithm = job.algorithm || job.model_type || 'model';
     const datasetName = job.dataset_path ? 
       job.dataset_path.split('/').pop().split('.')[0] : 'dataset';
-    return `${job.job_name}_${job.model_type}_${datasetName}`;
+    
+    return `${jobName}_${algorithm}_${datasetName}`;
   };
 
   // Real-time job status monitoring (disabled fake artifact generation)
@@ -50,7 +55,10 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
     if (!job?.job_id) return;
 
     try {
-      const currentEpoch = Math.floor((job.progress || 0) / 10) + 1;
+      const totalEpochs = job?.epochs || 10;
+      const progress = job.progress || 0;
+      // Calculate current epoch and ensure it doesn't exceed total epochs
+      const currentEpoch = Math.min(Math.ceil(progress / (100 / totalEpochs)), totalEpochs);
       const loss = Math.max(0.1, 1.0 - (currentEpoch * 0.08) + Math.random() * 0.1);
       const accuracy = Math.min(0.98, 0.5 + (currentEpoch * 0.04) + Math.random() * 0.05);
 
@@ -185,7 +193,7 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
 
       // Create model data
       const modelData = {
-        model_type: job.model_type,
+        algorithm: job.algorithm || job.model_type || 'unknown',
         job_id: job.job_id,
         final_metrics: {
           loss: Math.random() * 0.3,
@@ -220,8 +228,8 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
       modelMetadata.append('file', modelFile);
       modelMetadata.append('metadata', JSON.stringify({
         job_id: job.job_id,
-        name: job.job_name,
-        model_type: job.model_type,
+        name: job.job_name || job.name,
+        algorithm: job.algorithm || job.model_type || 'unknown',
         extension: 'json',
         content_type: 'application/json',
         metrics: modelData.final_metrics,
@@ -258,8 +266,9 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
   };
 
   const progress = job?.progress || 0;
-  const currentEpoch = Math.floor(progress / 10) + 1;
   const totalEpochs = job?.epochs || 10;
+  // Calculate current epoch and ensure it doesn't exceed total epochs
+  const currentEpoch = Math.min(Math.ceil(progress / (100 / totalEpochs)), totalEpochs);
 
   return (
     <Card>

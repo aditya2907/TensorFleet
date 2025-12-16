@@ -24,14 +24,15 @@ const modelTypes = [
   { value: 'resnet101', label: 'ResNet-101', category: 'Computer Vision' },
   { value: 'vit', label: 'Vision Transformer', category: 'Computer Vision' },
   { value: 'cnn', label: 'Custom CNN', category: 'Computer Vision' },
-  { value: 'bert-base', label: 'BERT Base', category: 'Natural Language Processing' },
-  { value: 'bert-large', label: 'BERT Large', category: 'Natural Language Processing' },
-  { value: 'gpt2', label: 'GPT-2', category: 'Natural Language Processing' },
-  { value: 'gpt2-medium', label: 'GPT-2 Medium', category: 'Natural Language Processing' },
-  { value: 'random-forest', label: 'Random Forest', category: 'Traditional ML' },
-  { value: 'logistic-regression', label: 'Logistic Regression', category: 'Traditional ML' },
-  { value: 'svm', label: 'Support Vector Machine', category: 'Traditional ML' },
-  { value: 'decision-tree', label: 'Decision Tree', category: 'Traditional ML' },
+  { value: 'bert_base', label: 'BERT (Base)', category: 'NLP' },
+  { value: 'bert_large', label: 'BERT (Large)', category: 'NLP' },
+  { value: 'gpt2', label: 'GPT-2', category: 'NLP' },
+  { value: 'gpt2_medium', label: 'GPT-2 (Medium)', category: 'NLP' },
+  { value: 'random_forest', label: 'Random Forest', category: 'Traditional ML' },
+  { value: 'logistic_regression', label: 'Logistic Regression', category: 'Traditional ML' },
+  { value: 'svm', label: 'SVM', category: 'Traditional ML' },
+  { value: 'decision_tree', label: 'Decision Tree', category: 'Traditional ML' },
+  { value: 'dnn', label: 'Deep Neural Network', category: 'Traditional ML' },
 ];
 
 const optimizerOptions = [

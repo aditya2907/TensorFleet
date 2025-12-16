@@ -9,7 +9,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Dict, Any
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import sys
 sys.path.append('/app')
@@ -111,49 +111,18 @@ def list_datasets():
 def list_algorithms():
     """List supported algorithms"""
     algorithms = [
-        {
-            'name': 'random_forest',
-            'description': 'Random Forest Classifier',
-            'hyperparameters': {
-                'n_estimators': 'Number of trees (default: 100)',
-                'max_depth': 'Maximum tree depth (default: None)',
-                'random_state': 'Random seed (default: 42)'
-            }
-        },
-        {
-            'name': 'logistic_regression',
-            'description': 'Logistic Regression',
-            'hyperparameters': {
-                'max_iter': 'Maximum iterations (default: 1000)',
-                'random_state': 'Random seed (default: 42)'
-            }
-        },
-        {
-            'name': 'svm',
-            'description': 'Support Vector Machine',
-            'hyperparameters': {
-                'kernel': 'Kernel type (default: rbf)',
-                'C': 'Regularization parameter (default: 1.0)',
-                'random_state': 'Random seed (default: 42)'
-            }
-        },
-        {
-            'name': 'decision_tree',
-            'description': 'Decision Tree Classifier',
-            'hyperparameters': {
-                'max_depth': 'Maximum tree depth (default: None)',
-                'random_state': 'Random seed (default: 42)'
-            }
-        }
+        {"name": "random_forest", "type": "scikit-learn", "description": "Random Forest Classifier for classification tasks."},
+        {"name": "logistic_regression", "type": "scikit-learn", "description": "Logistic Regression for binary/multiclass classification."},
+        {"name": "svm", "type": "scikit-learn", "description": "Support Vector Machine for classification tasks."},
+        {"name": "decision_tree", "type": "scikit-learn", "description": "Decision Tree Classifier for interpretable models."},
+        {"name": "dnn", "type": "tensorflow", "description": "Deep Neural Network for complex classification tasks."},
+        {"name": "cnn", "type": "tensorflow", "description": "Convolutional Neural Network for image-based tasks."}
     ]
-    
-    return jsonify({'algorithms': algorithms}), 200
+    return jsonify({"algorithms": algorithms})
 
 @app.route('/metrics', methods=['GET'])
 def metrics():
     """Prometheus metrics endpoint"""
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-    from flask import Response
     return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 @app.errorhandler(404)

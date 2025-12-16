@@ -29,6 +29,7 @@ import ModelRegistryPanel from './components/ModelRegistryPanel';
 import DatasetManagerPanel from './components/DatasetManagerPanel';
 import StorageOverviewPanel from './components/StorageOverviewPanel';
 import WorkerVisualization from './components/WorkerVisualization';
+import WorkerScalingControl from './components/WorkerScalingControl';
 import ErrorBoundary from './components/ErrorBoundary';
 import ThemeToggle from './components/ThemeToggle';
 import { jobsAPI, monitoringAPI, storageAPI } from './api/api';
@@ -268,7 +269,20 @@ function App() {
       case 'models':
         return <ModelRegistryPanel onNotification={handleNotification} />;
       case 'workers':
-        return <WorkerVisualization />;
+        return (
+          <Grid container spacing={3}>
+            <Grid item xs={12} lg={4}>
+              <ErrorBoundary>
+                <WorkerScalingControl />
+              </ErrorBoundary>
+            </Grid>
+            <Grid item xs={12} lg={8}>
+              <ErrorBoundary>
+                <WorkerVisualization />
+              </ErrorBoundary>
+            </Grid>
+          </Grid>
+        );
       default:
         return <Typography>Select a view</Typography>;
     }
