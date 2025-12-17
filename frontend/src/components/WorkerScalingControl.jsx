@@ -372,7 +372,7 @@ const WorkerScalingControl = () => {
           </Box>
         )}
 
-        {/* Info Box */}
+        {/* Info Box
         <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
           <Typography variant="caption" color="textSecondary" component="div">
             <strong>💡 Scaling Tips:</strong>
@@ -383,7 +383,7 @@ const WorkerScalingControl = () => {
               <li>For production, use Kubernetes HPA (configured in k8s/worker.yaml)</li>
             </ul>
           </Typography>
-        </Box>
+        </Box> */}
       </CardContent>
     </Card>
   );
