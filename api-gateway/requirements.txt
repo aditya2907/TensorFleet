@@ -1,5 +1,0 @@
-fastapi
-uvicorn
-python-jose[cryptography]
-httpx
-python-multipart

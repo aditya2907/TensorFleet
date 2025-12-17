@@ -23,7 +23,8 @@ spec:
     spec:
       containers:
       - name: worker
-        image: ghcr.io/your-username/tensorfleet/worker:latest
+        image: tensorfleet/worker:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 50052
           name: grpc

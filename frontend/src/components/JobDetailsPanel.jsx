@@ -13,6 +13,11 @@ import {
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CancelIcon from '@mui/icons-material/Cancel';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import SaveIcon from '@mui/icons-material/Save';
+import JobStatusChip from './JobStatusChip';
+import JobMetrics from './JobMetrics';
+import LogViewer from './LogViewer';
+import TrainingProgressMonitor from './TrainingProgressMonitor';
 
 const StatusChip = ({ status }) => {
   const getColor = () => {
@@ -51,7 +56,7 @@ const MetricItem = ({ label, value }) => (
   </Box>
 );
 
-const JobDetailsPanel = ({ job, onRefresh, onCancel }) => {
+const JobDetailsPanel = ({ job, onRefresh, onCancel, onNotification }) => {
   if (!job) {
     return (
       <Card>
@@ -62,7 +67,7 @@ const JobDetailsPanel = ({ job, onRefresh, onCancel }) => {
               No Job Selected
             </Typography>
             <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-              Submit a new job or select from recent jobs
+              Submit a new job or select from the jobs list
             </Typography>
           </Box>
         </CardContent>
@@ -104,25 +109,7 @@ const JobDetailsPanel = ({ job, onRefresh, onCancel }) => {
           </Typography>
         </Box>
 
-        {/* Progress */}
-        <Box sx={{ mb: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="caption" color="textSecondary">
-              Progress
-            </Typography>
-            <Typography variant="caption" sx={{ fontWeight: 600 }}>
-              {progress}%
-            </Typography>
-          </Box>
-          <LinearProgress
-            variant="determinate"
-            value={progress}
-            sx={{ height: 8, borderRadius: 4 }}
-          />
-          <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
-            {job.completed_tasks || 0} / {job.total_tasks || 0} tasks completed
-          </Typography>
-        </Box>
+
 
         {/* Metrics */}
         <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -139,6 +126,29 @@ const JobDetailsPanel = ({ job, onRefresh, onCancel }) => {
             />
           </Grid>
         </Grid>
+
+        {/* Auto-saved Model Notification */}
+        {job.status === 'COMPLETED' && (
+          <Box sx={{ mb: 2 }}>
+            <Chip
+              icon={<SaveIcon />}
+              label="Model Automatically Saved"
+              color="success"
+              variant="outlined"
+              size="small"
+              sx={{ mr: 1 }}
+            />
+            {job.model_saved && job.model_id && (
+              <Chip
+                label={`Model ID: ${job.model_id.substring(0, 8)}...`}
+                color="primary"
+                variant="outlined"
+                size="small"
+                sx={{ fontFamily: 'monospace' }}
+              />
+            )}
+          </Box>
+        )}
 
         {/* Message */}
         {job.message && (
@@ -179,6 +189,18 @@ const JobDetailsPanel = ({ job, onRefresh, onCancel }) => {
               Cancel
             </Button>
           )}
+        </Box>
+        <Divider sx={{ my: 2 }} />
+        
+        {/* Real-time Training Progress with Artifact Generation */}
+        <Box sx={{ mb: 2 }}>
+          <TrainingProgressMonitor job={job} onNotification={onNotification} />
+        </Box>
+
+        {/* Job Metrics */}
+        <JobMetrics metrics={job.metrics} />
+        <Box sx={{ mt: 2 }}>
+          <LogViewer jobId={job.job_id} />
         </Box>
       </CardContent>
     </Card>

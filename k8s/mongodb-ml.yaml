@@ -127,7 +127,8 @@ spec:
     spec:
       containers:
       - name: worker-ml
-        image: ghcr.io/your-username/tensorfleet/worker-ml:latest
+        image: tensorfleet/worker-ml:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
           name: http-metrics
@@ -203,7 +204,8 @@ spec:
     spec:
       containers:
       - name: model-service
-        image: ghcr.io/your-username/tensorfleet/model-service:latest
+        image: tensorfleet/model-service:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8083
           name: http

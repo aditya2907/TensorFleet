@@ -31,7 +31,8 @@ RUN go mod download || true
 COPY worker/ ./
 
 RUN go mod tidy || true
-RUN CGO_ENABLED=0 GOOS=linux go build -o worker .
+# Build only the main package to avoid conflict with generated proto packages
+RUN CGO_ENABLED=0 GOOS=linux go build -o worker ./main.go
 
 # Runtime stage
 FROM alpine:latest

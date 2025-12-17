@@ -11,6 +11,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from flask import Flask, request, jsonify, send_file, Response
+from flask_cors import CORS
 from pymongo import MongoClient
 from gridfs import GridFS
 from bson import ObjectId
@@ -29,6 +30,15 @@ API_REQUESTS = Counter('api_requests_total', 'Total API requests', ['endpoint', 
 REQUEST_DURATION = Histogram('request_duration_seconds', 'Request duration', ['endpoint'])
 
 app = Flask(__name__)
+
+# Enable CORS for all routes
+CORS(app, resources={
+    r"/api/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 class ModelService:
     """Model management service with MongoDB integration"""

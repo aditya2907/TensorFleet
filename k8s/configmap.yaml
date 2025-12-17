@@ -4,12 +4,93 @@ metadata:
   name: tensorfleet-config
   namespace: tensorfleet
 data:
-  REDIS_ADDR: "redis-service:6379"
-  MINIO_ENDPOINT: "minio-service:9000"
-  MINIO_SECURE: "false"
-  ORCHESTRATOR_ADDR: "orchestrator-service:50051"
-  MONGODB_URL: "mongodb+srv://aditya:N6dZepf9h6v8hSyQ@cluster0.poidcg0.mongodb.net/tensorfleet?retryWrites=true&w=majority"
-  MONGODB_DB: "tensorfleet"
+  redis-addr: "redis:6379"
+  minio-endpoint: "minio:9000"
+  minio-secure: "false"
+  orchestrator-addr: "orchestrator:50051"
+  mongodb-url: "mongodb://admin:password123@mongodb-service:27017/tensorfleet?authSource=admin"  # Default to in-cluster MongoDB for local deployments (change to Atlas URI if needed)
+  mongodb-db: "tensorfleet"
+  compose-project-name: "tensorfleet"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: tensorfleet
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+      
+      - job_name: 'api-gateway'
+        static_configs:
+          - targets: ['api-gateway:8080']
+        metrics_path: /metrics
+        scrape_interval: 30s
+      
+      - job_name: 'monitoring'
+        static_configs:
+          - targets: ['monitoring:8082']
+        metrics_path: /metrics
+        scrape_interval: 30s
+      
+      - job_name: 'storage'
+        static_configs:
+          - targets: ['storage:8081']
+        metrics_path: /metrics
+        scrape_interval: 30s
+      
+      - job_name: 'worker-ml'
+        static_configs:
+          - targets: ['worker-ml:8000']
+        metrics_path: /metrics
+        scrape_interval: 30s
+      
+      - job_name: 'model-service'
+        static_configs:
+          - targets: ['model-service:8083']
+        metrics_path: /metrics
+        scrape_interval: 30s
+      
+      # Kubernetes worker discovery
+      - job_name: 'kubernetes-workers'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - tensorfleet
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: job
+            replacement: ${1}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  namespace: tensorfleet
+data:
+  datasources.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
 ---
 apiVersion: v1
 kind: Secret
@@ -18,7 +99,8 @@ metadata:
   namespace: tensorfleet
 type: Opaque
 stringData:
-  MINIO_ACCESS_KEY: "minioadmin"
-  MINIO_SECRET_KEY: "minioadmin"
+  minio-access-key: "minioadmin"
+  minio-secret-key: "minioadmin"
+  jwt-secret: "your-jwt-secret-key-here"
   MONGODB_USERNAME: "admin"
   MONGODB_PASSWORD: "password123"

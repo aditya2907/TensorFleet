@@ -1,24 +1,24 @@
 services:
-  # MongoDB - for dataset and model storage
-  mongodb:
-    image: mongo:7.0
-    container_name: tensorfleet-mongodb
-    ports:
-      - "27017:27017"
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password123
-      - MONGO_INITDB_DATABASE=tensorfleet
-    volumes:
-      - mongodb_data:/data/db
-      - mongodb_config:/data/configdb
-    networks:
-      - tensorfleet-net
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+  # MongoDB - DISABLED: Using MongoDB Atlas instead
+  # mongodb:
+  #   image: mongo:7.0
+  #   container_name: tensorfleet-mongodb
+  #   ports:
+  #     - "27017:27017"
+  #   environment:
+  #     - MONGO_INITDB_ROOT_USERNAME=admin
+  #     - MONGO_INITDB_ROOT_PASSWORD=password123
+  #     - MONGO_INITDB_DATABASE=tensorfleet
+  #   volumes:
+  #     - mongodb_data:/data/db
+  #     - mongodb_config:/data/configdb
+  #   networks:
+  #     - tensorfleet-net
+  #   healthcheck:
+  #     test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
 
   # Redis - for orchestrator job metadata
   redis:
@@ -83,7 +83,7 @@ services:
       context: .
       dockerfile: worker/Dockerfile
     deploy:
-      replicas: 3
+      replicas: ${WORKER_REPLICAS:-3}
     environment:
       - PORT=50052
       - ORCHESTRATOR_ADDR=orchestrator:50051
@@ -104,6 +104,7 @@ services:
     environment:
       - PORT=8080
       - ORCHESTRATOR_ADDR=orchestrator:50051
+      - JOB_ORCHESTRATOR_URL=http://monitoring:8082
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -127,6 +128,8 @@ services:
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_SECURE=false
+      - MONGODB_URL=${MONGODB_URL}
+      - MONGODB_DB=${MONGODB_DB}
     depends_on:
       minio:
         condition: service_healthy
@@ -146,8 +149,12 @@ services:
       - "8082:8082"
     environment:
       - PORT=8082
+      - COMPOSE_PROJECT_NAME=tensorfleet
     networks:
       - tensorfleet-net
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
       interval: 10s
@@ -206,18 +213,20 @@ services:
   worker-ml:
     build: ./worker-ml
     container_name: tensorfleet-worker-ml
+    command: ["python", "api_server.py"]
     ports:
       - "8000:8000"
     environment:
-      - MONGODB_URL=mongodb+srv://aditya:N6dZepf9h6v8hSyQ@cluster0.poidcg0.mongodb.net/tensorfleet?retryWrites=true&w=majority
-      - MONGODB_DB=tensorfleet
-    depends_on:
-      mongodb:
-        condition: service_healthy
+      - MONGODB_URL=${MONGODB_URL}
+      - MONGODB_DB=${MONGODB_DB}
+      - PORT=8000
+    # depends_on:
+    #   mongodb:
+    #     condition: service_healthy
     networks:
       - tensorfleet-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/metrics"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -230,11 +239,11 @@ services:
       - "8083:8083"
     environment:
       - PORT=8083
-      - MONGODB_URL=mongodb+srv://aditya:N6dZepf9h6v8hSyQ@cluster0.poidcg0.mongodb.net/tensorfleet?retryWrites=true&w=majority
-      - MONGODB_DB=tensorfleet
-    depends_on:
-      mongodb:
-        condition: service_healthy
+      - MONGODB_URL=${MONGODB_URL}
+      - MONGODB_DB=${MONGODB_DB}
+    # depends_on:
+    #   mongodb:
+    #     condition: service_healthy
     networks:
       - tensorfleet-net
     healthcheck:

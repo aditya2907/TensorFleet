@@ -20,27 +20,48 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: api-gateway-service
+            name: api-gateway
             port:
-              number: 80
+              number: 8080
       - path: /storage(/|$)(.*)
         pathType: Prefix
         backend:
           service:
-            name: storage-service
+            name: storage
             port:
-              number: 80
+              number: 8081
       - path: /monitoring(/|$)(.*)
         pathType: Prefix
         backend:
           service:
-            name: monitoring-service
+            name: monitoring
             port:
-              number: 80
+              number: 8082
+      - path: /grafana(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana
+            port:
+              number: 3001
+      - path: /prometheus(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus
+            port:
+              number: 9090
+      - path: /minio(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: minio
+            port:
+              number: 9001
       - path: /()(.*)
         pathType: Prefix
         backend:
           service:
-            name: frontend-service
+            name: frontend
             port:
-              number: 80
+              number: 3000

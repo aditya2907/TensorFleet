@@ -5,12 +5,15 @@
 # ============================================================================
 .env
 .env.local
+.env.development
+.env.production
 .env.*.local
 .env.development.local
 .env.test.local
 .env.production.local
 *.env
 !.env.example
+docs
 
 # ============================================================================
 # Python
@@ -163,7 +166,7 @@ checkpoints/
 *.ckpt
 
 # ============================================================================
-# Temporary Files
+# Temporary Files & Build Artifacts
 # ============================================================================
 *.tmp
 *.temp
@@ -171,6 +174,20 @@ checkpoints/
 *.swo
 *~
 .cache/
+
+# Demo & temporary files
+demo*.sh
+docker-compose.development.yml
+docker-compose.production.yml
+*SUMMARY.md
+*_SUMMARY.md
+*_FIXES.md
+*_FIX.md
+
+# Build artifacts
+api-gateway/api-gateway
+orchestrator/orchestrator
+worker/worker
 
 # ============================================================================
 # Test Coverage
@@ -226,3 +243,11 @@ site/
 # ============================================================================
 volumes/
 .volumes/
+
+
+*.sh
+*.bat
+
+postman/
+*.json
+tests/
