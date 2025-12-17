@@ -19,7 +19,8 @@ spec:
     spec:
       containers:
       - name: api-gateway
-        image: ghcr.io/your-username/tensorfleet/api-gateway:latest
+        image: tensorfleet/api-gateway:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
           name: http

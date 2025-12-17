@@ -51,7 +51,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: minio
-  namespace: distml
+  namespace: tensorfleet
 spec:
   serviceName: "minio"
   replicas: 1
@@ -75,15 +75,21 @@ spec:
         - containerPort: 9001
         env:
         - name: MINIO_ROOT_USER
-          value: "minioadmin"
+          valueFrom:
+            secretKeyRef:
+              name: tensorfleet-secrets
+              key: minio-access-key
         - name: MINIO_ROOT_PASSWORD
-          value: "minioadmin"
+          valueFrom:
+            secretKeyRef:
+              name: tensorfleet-secrets
+              key: minio-secret-key
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: minio
-  namespace: distml
+  namespace: tensorfleet
 spec:
   selector:
     app: minio
@@ -100,7 +106,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
-  namespace: distml
+  namespace: tensorfleet
 spec:
   replicas: 1
   selector:
@@ -121,7 +127,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis
-  namespace: distml
+  namespace: tensorfleet
 spec:
   selector:
     app: redis

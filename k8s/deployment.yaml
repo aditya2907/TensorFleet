@@ -70,9 +70,15 @@ spec:
         - containerPort: 9001
         env:
         - name: MINIO_ROOT_USER
-          value: "minioadmin"
+          valueFrom:
+            secretKeyRef:
+              name: tensorfleet-secrets
+              key: minio-access-key
         - name: MINIO_ROOT_PASSWORD
-          value: "minioadmin"
+          valueFrom:
+            secretKeyRef:
+              name: tensorfleet-secrets
+              key: minio-secret-key
         command:
         - minio
         - server
@@ -134,6 +140,7 @@ spec:
       containers:
       - name: orchestrator
         image: tensorfleet/orchestrator:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 50051
         env:
@@ -183,6 +190,7 @@ spec:
       containers:
       - name: worker
         image: tensorfleet/worker:latest
+        imagePullPolicy: IfNotPresent
         env:
         - name: PORT
           value: "50052"
@@ -208,6 +216,7 @@ spec:
       containers:
       - name: api-gateway
         image: tensorfleet/api-gateway:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
         env:
@@ -261,6 +270,7 @@ spec:
       containers:
       - name: storage
         image: tensorfleet/storage:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8081
         env:
@@ -269,9 +279,15 @@ spec:
         - name: MINIO_ENDPOINT
           value: "minio:9000"
         - name: MINIO_ACCESS_KEY
-          value: "minioadmin"
+          valueFrom:
+            secretKeyRef:
+              name: tensorfleet-secrets
+              key: minio-access-key
         - name: MINIO_SECRET_KEY
-          value: "minioadmin"
+          valueFrom:
+            secretKeyRef:
+              name: tensorfleet-secrets
+              key: minio-secret-key
         - name: MINIO_SECURE
           value: "false"
         - name: MONGODB_URL
@@ -328,6 +344,7 @@ spec:
       containers:
       - name: monitoring
         image: tensorfleet/monitoring:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8082
         env:
@@ -379,6 +396,7 @@ spec:
       containers:
       - name: frontend
         image: tensorfleet/frontend:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
         env:
@@ -520,6 +538,7 @@ spec:
       containers:
       - name: worker-ml
         image: tensorfleet/worker-ml:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
         env:
@@ -580,6 +599,7 @@ spec:
       containers:
       - name: model-service
         image: tensorfleet/model-service:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8083
         env:

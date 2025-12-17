@@ -8,7 +8,7 @@ data:
   minio-endpoint: "minio:9000"
   minio-secure: "false"
   orchestrator-addr: "orchestrator:50051"
-  mongodb-url: "mongodb+srv://your-mongodb-atlas-url"  # Replace with your MongoDB Atlas URL
+  mongodb-url: "mongodb://admin:password123@mongodb-service:27017/tensorfleet?authSource=admin"  # Default to in-cluster MongoDB for local deployments (change to Atlas URI if needed)
   mongodb-db: "tensorfleet"
   compose-project-name: "tensorfleet"
 ---
@@ -102,3 +102,5 @@ stringData:
   minio-access-key: "minioadmin"
   minio-secret-key: "minioadmin"
   jwt-secret: "your-jwt-secret-key-here"
+  MONGODB_USERNAME: "admin"
+  MONGODB_PASSWORD: "password123"
