@@ -12,6 +12,7 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app) # Enable CORS for all routes
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ def ensure_buckets():
         except S3Error as e:
             logger.error(f"Error creating bucket {bucket}: {e}")
 
+# ------------------- Health Check -------------------
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint with MinIO and MongoDB connectivity tests"""
@@ -88,6 +90,7 @@ def health_check():
             'error': str(e)
         }), 503
 
+# ------------------- File Upload -------------------
 @app.route('/api/v1/upload/<bucket>/<path:object_name>', methods=['POST'])
 def upload_file(bucket, object_name):
     """Upload a file to MinIO"""
@@ -127,6 +130,7 @@ def upload_file(bucket, object_name):
         logger.error(f"Error uploading file: {e}")
         return jsonify({'error': str(e)}), 500
 
+# ------------------- File Download -------------------
 @app.route('/api/v1/download/<bucket>/<path:object_name>', methods=['GET'])
 def download_file(bucket, object_name):
     """Download a file from MinIO"""
@@ -153,6 +157,7 @@ def download_file(bucket, object_name):
         logger.error(f"Error downloading file: {e}")
         return jsonify({'error': str(e)}), 404
 
+# ------------------- List Objects -------------------
 @app.route('/api/v1/list/<bucket>', methods=['GET'])
 def list_objects(bucket):
     """List all objects in a bucket"""
