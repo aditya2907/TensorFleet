@@ -1,6 +1,6 @@
 # 📊 Monitoring Service
 
-The Monitoring Service is the advanced observability and analytics engine of TensorFleet, providing **real-time metrics aggregation**, **intelligent health monitoring**, **auto-scaling analytics**, and comprehensive system insights with **Prometheus**, **Grafana**, and **MongoDB Atlas** integration.
+The Monitoring Service is the advanced observability and analytics engine of TensorFleet, providing **real-time metrics aggregation**, **intelligent health monitoring**, **auto-scaling analytics**, and comprehensive system insights with **MongoDB Atlas** integration.
 
 ## 🚀 Overview
 
@@ -9,11 +9,12 @@ This service acts as the central AI-powered observability platform, collecting a
 ## 🏗️ Architecture
 
 ```
-┌────────────────┐    Metrics    ┌─────────────────┐    Scrape    ┌─────────────────┐
-│   All Services │──────────────►│   Monitoring    │◄────────────│   Prometheus    │
-│   (Workers,    │    (HTTP/API) │   Service       │  (Port 8082) │   (Grafana)     │
-│    API, etc.)  │               └─────────────────┘              └─────────────────┘
-└────────────────┘                        │
+┌────────────────┐    Metrics    ┌─────────────────┐
+│   All Services │──────────────►│   Monitoring    │
+│   (Workers,    │    (HTTP/API) │   Service       │
+│    API, etc.)  │               │   (Port 8082)   │
+└────────────────┘               └─────────────────┘
+                                          │
                                           ▼ Analytics
                                  ┌─────────────────┐
                                  │   Dashboard     │
@@ -28,7 +29,7 @@ This service acts as the central AI-powered observability platform, collecting a
 - **Training Analytics**: Job progress, performance, and resource utilization insights
 - **Worker Pool Monitoring**: Individual worker health and load balancing analytics
 - **System Performance**: Platform-wide performance metrics and bottleneck detection
-- **Prometheus Integration**: Standard metrics export for Grafana and alerting
+- **Metrics Export**: Standard metrics endpoints for external monitoring tools
 - **Fallback Monitoring**: Mock data generation when services are unavailable
 - **Custom Dashboards**: Configurable monitoring views and visualizations
 
@@ -820,3 +821,20 @@ def secure_metrics_access():
 ## 📄 License
 
 Part of the TensorFleet project - see root LICENSE file.
+
+## 👥 Development Team
+
+**Primary Owner**: Soham Maji (25204731) - Frontend & Monitoring Lead
+
+This service is part of the TensorFleet distributed ML platform developed by:
+- Soham Maji (25204731) - Frontend & Monitoring Lead (Monitoring, Frontend, DevOps)
+- Aditya Suryawanshi (25211365) - Backend Infrastructure Lead
+- Rahul Mirashi (25211365) - ML & Data Services Lead
+
+For detailed work distribution, see [docs/TEAM_WORK_DIVISION.md](../docs/TEAM_WORK_DIVISION.md)
+
+---
+
+**Last Updated**: December 21, 2025  
+**Version**: 2.0  
+**Status**: Production Ready
