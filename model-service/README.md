@@ -1271,3 +1271,20 @@ def download_model(model_id):
 ## 📄 License
 
 Part of the TensorFleet project - see root LICENSE file.
+
+## 👥 Development Team
+
+**Primary Owner**: Rahul Mirashi (25211365) - ML & Data Services Lead
+
+This service is part of the TensorFleet distributed ML platform developed by:
+- Rahul Mirashi (25211365) - ML & Data Services Lead (Model Service, ML Worker, Storage)
+- Aditya Suryawanshi (25211365) - Backend Infrastructure Lead
+- Soham Maji (25204731) - Frontend & Monitoring Lead
+
+For detailed work distribution, see [docs/TEAM_WORK_DIVISION.md](../docs/TEAM_WORK_DIVISION.md)
+
+---
+
+**Last Updated**: December 21, 2025  
+**Version**: 2.0  
+**Status**: Production Ready
