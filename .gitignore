@@ -151,15 +151,15 @@ models/*.pth
 models/*.onnx
 
 # Large datasets - exclude all data files
-data/
-data/*.csv
-data/*.parquet
-data/*.json
-data/**/*.csv
-data/**/*.parquet
-data/**/*.json
-!data/samples/
-!data/README.md
+# data/
+# data/*.csv
+# data/*.parquet
+# data/*.json
+# data/**/*.csv
+# data/**/*.parquet
+# data/**/*.json
+# !data/samples/
+# !data/README.md
 
 # Checkpoints
 checkpoints/
