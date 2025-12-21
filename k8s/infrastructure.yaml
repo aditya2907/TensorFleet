@@ -80,12 +80,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: tensorfleet-secrets
-              key: MINIO_ACCESS_KEY
+              key: minio-access-key
         - name: MINIO_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
               name: tensorfleet-secrets
-              key: MINIO_SECRET_KEY
+              key: minio-secret-key
         ports:
         - containerPort: 9000
           name: api

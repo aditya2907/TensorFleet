@@ -179,7 +179,15 @@ kubectl apply -R -f .
 
 # Wait for core deployments to be ready (unless skipped)
 if [ "$SKIP_WAIT" = false ]; then
-    DEPLOYMENTS=(redis minio orchestrator api-gateway monitoring storage worker-ml model-service frontend worker)
+    # StatefulSets (redis and minio)
+    echo "⏳ Waiting for StatefulSet/redis to be ready..."
+    kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=300s statefulset/redis -n "$NAMESPACE" || echo "⚠️ StatefulSet/redis did not become ready within timeout"
+    
+    echo "⏳ Waiting for StatefulSet/minio to be ready..."
+    kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=300s statefulset/minio -n "$NAMESPACE" || echo "⚠️ StatefulSet/minio did not become ready within timeout"
+    
+    # Deployments
+    DEPLOYMENTS=(orchestrator api-gateway monitoring storage worker-ml model-service frontend worker)
     for d in "${DEPLOYMENTS[@]}"; do
         echo "⏳ Waiting for deployment/$d to be available..."
         kubectl wait --for=condition=available --timeout=300s deployment/$d -n "$NAMESPACE" || echo "⚠️ deployment/$d did not become available within timeout"

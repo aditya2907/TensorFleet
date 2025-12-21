@@ -202,7 +202,7 @@ spec:
         - name: PORT
           value: "8081"
         - name: MINIO_ENDPOINT
-          value: "minio:9000"
+          value: "minio-service:9000"
         - name: MINIO_ACCESS_KEY
           valueFrom:
             secretKeyRef:
