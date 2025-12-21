@@ -176,39 +176,6 @@ services:
       - VITE_API_URL=http://localhost:8080
       - VITE_MONITORING_URL=http://localhost:8082
 
-  # Prometheus - metrics collection
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: tensorfleet-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus:/etc/prometheus
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-    networks:
-      - tensorfleet-net
-
-  # Grafana - metrics visualization
-  grafana:
-    image: grafana/grafana:latest
-    container_name: tensorfleet-grafana
-    ports:
-      - "3001:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
-    volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
-    networks:
-      - tensorfleet-net
-
   # ML Worker - machine learning training with MongoDB
   worker-ml:
     build: ./worker-ml
@@ -254,8 +221,6 @@ services:
 
 volumes:
   minio_data:
-  prometheus_data:
-  grafana_data:
   mongodb_data:
   mongodb_config:
 
