@@ -17,7 +17,7 @@ get_mapping() {
   case "$1" in
     frontend) echo "frontend:3000:3000" ;;
     api-gateway) echo "api-gateway:8080:8080" ;;
-    minio) echo "minio:9001:9001" ;; # MinIO console
+    minio) echo "minio-service:9001:9001" ;; # MinIO console
     storage) echo "storage:8081:8081" ;;
     monitoring) echo "monitoring:8082:8082" ;;
     *) return 1 ;;
