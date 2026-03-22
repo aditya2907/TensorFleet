@@ -2,17 +2,6 @@
 
 TensorFleet is a production-ready, cloud-native distributed machine learning training platform that orchestrates ML workloads across multiple compute nodes using modern microservices architecture, gRPC communication, and Kubernetes orchestration.
 
-## � Team
-
-**Project Team**: TensorFleet Development Team
-
-| Team Member | Student ID | Role | Focus Areas |
-|-------------|------------|------|-------------|
-| **Aditya Suryawanshi** | 25211365 | Backend Infrastructure Lead | API Gateway, Orchestrator, Worker Nodes, gRPC |
-| **Rahul Mirashi** | 25211365 | ML & Data Services Lead | ML Worker, Model Service, Storage, MongoDB |
-| **Soham Maji** | 25204731 | Frontend & Monitoring Lead | React Dashboard, Monitoring, DevOps, Documentation |
-
-📖 **Detailed Work Distribution**: See [docs/TEAM_WORK_DIVISION.md](./docs/TEAM_WORK_DIVISION.md) for comprehensive breakdown of responsibilities, tasks, and contributions.
 
 ## �📋 Table of Contents
 
