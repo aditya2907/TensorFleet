@@ -1,6 +1,6 @@
 # 🚀 TensorFleet - Distributed ML Training Platform
 
-TensorFleet is a production-ready, cloud-native distributed machine learning training platform that orchestrates ML workloads across multiple compute nodes using modern microservices architecture, gRPC communication, and Kubernetes orchestration.
+TensorFleet is a distributed machine learning training platform that orchestrates ML workloads across multiple compute nodes using modern microservices architecture, gRPC communication, and Kubernetes orchestration.
 
 
 ## �📋 Table of Contents
