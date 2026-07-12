@@ -7,5 +7,7 @@ prometheus-client==0.17.1
 grpcio==1.58.0
 grpcio-tools==1.58.0
 tensorflow
+torch>=2.2
 requests
 python-dotenv==1.0.0
+gunicorn==21.2.0

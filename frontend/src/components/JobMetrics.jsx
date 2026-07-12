@@ -1,30 +1,41 @@
 import React from 'react';
-import { Grid, Paper, Typography, Box } from '@mui/material';
+import { Box, Card, CardContent, Grid, Typography } from '@mui/material';
+import QueryStatsRoundedIcon from '@mui/icons-material/QueryStatsRounded';
 
 const JobMetrics = ({ metrics }) => {
   if (!metrics) {
-    return <Typography color="textSecondary">No metrics available.</Typography>;
+    return (
+      <Box sx={{ py: 5, textAlign: 'center' }}>
+        <QueryStatsRoundedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+        <Typography variant="body2" color="text.secondary">
+          No metrics available.
+        </Typography>
+      </Box>
+    );
   }
 
   const metricItems = Object.entries(metrics).map(([key, value]) => (
     <Grid item xs={6} sm={4} key={key}>
-      <Paper sx={{ p: 2, textAlign: 'center' }}>
-        <Typography variant="caption" color="textSecondary" sx={{ textTransform: 'uppercase' }}>
-          {key.replace(/_/g, ' ')}
-        </Typography>
-        <Typography variant="h6">
-          {typeof value === 'number' ? value.toFixed(4) : value}
-        </Typography>
-      </Paper>
+      <Card sx={{ height: '100%' }}>
+        <CardContent>
+          <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+            {key.replace(/_/g, ' ')}
+          </Typography>
+          <Typography variant="h3" sx={{ fontWeight: 700, lineHeight: 1.15, wordBreak: 'break-word' }}>
+            {typeof value === 'number' ? value.toFixed(4) : value}
+          </Typography>
+        </CardContent>
+      </Card>
     </Grid>
   ));
 
   return (
     <Box>
-      <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
-        Metrics
-      </Typography>
-      <Grid container spacing={2}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+        <QueryStatsRoundedIcon fontSize="small" color="primary" />
+        <Typography variant="h6">Metrics</Typography>
+      </Box>
+      <Grid container spacing={2.5}>
         {metricItems}
       </Grid>
     </Box>

@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Alert,
   Card,
   CardContent,
   Typography,
@@ -14,6 +15,8 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import CancelIcon from '@mui/icons-material/Cancel';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SaveIcon from '@mui/icons-material/Save';
+import WorkOutlineRoundedIcon from '@mui/icons-material/WorkOutlineRounded';
+import { monoFontFamily } from '../theme/typography';
 import JobStatusChip from './JobStatusChip';
 import JobMetrics from './JobMetrics';
 import LogViewer from './LogViewer';
@@ -23,13 +26,15 @@ const StatusChip = ({ status }) => {
   const getColor = () => {
     switch (status?.toUpperCase()) {
       case 'RUNNING':
-        return 'primary';
+        return 'info';
+      case 'PENDING':
+        return 'warning';
       case 'COMPLETED':
         return 'success';
       case 'FAILED':
         return 'error';
       case 'CANCELLED':
-        return 'warning';
+        return 'default';
       default:
         return 'default';
     }
@@ -62,12 +67,9 @@ const JobDetailsPanel = ({ job, onRefresh, onCancel, onNotification }) => {
       <Card>
         <CardContent>
           <Box sx={{ textAlign: 'center', py: 8 }}>
-            <InfoOutlinedIcon sx={{ fontSize: 60, color: 'text.secondary', opacity: 0.3 }} />
-            <Typography variant="h6" color="textSecondary" sx={{ mt: 2 }}>
-              No Job Selected
-            </Typography>
-            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-              Submit a new job or select from the jobs list
+            <InfoOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+            <Typography variant="body2" color="text.secondary">
+              No job selected — submit a new job or select one from the jobs list
             </Typography>
           </Box>
         </CardContent>
@@ -81,9 +83,10 @@ const JobDetailsPanel = ({ job, onRefresh, onCancel, onNotification }) => {
   return (
     <Card>
       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            📊 Job Details
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <WorkOutlineRoundedIcon fontSize="small" color="primary" />
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Job Details
           </Typography>
           <StatusChip status={job.status} />
         </Box>
@@ -98,8 +101,8 @@ const JobDetailsPanel = ({ job, onRefresh, onCancel, onNotification }) => {
           <Typography
             variant="body2"
             sx={{
-              fontFamily: 'monospace',
-              bgcolor: 'grey.100',
+              fontFamily: monoFontFamily,
+              bgcolor: 'action.hover',
               p: 1,
               borderRadius: 1,
               wordBreak: 'break-all',
@@ -144,7 +147,7 @@ const JobDetailsPanel = ({ job, onRefresh, onCancel, onNotification }) => {
                 color="primary"
                 variant="outlined"
                 size="small"
-                sx={{ fontFamily: 'monospace' }}
+                sx={{ fontFamily: monoFontFamily }}
               />
             )}
           </Box>
@@ -152,20 +155,9 @@ const JobDetailsPanel = ({ job, onRefresh, onCancel, onNotification }) => {
 
         {/* Message */}
         {job.message && (
-          <Box
-            sx={{
-              bgcolor: 'info.lighter',
-              p: 2,
-              borderRadius: 1,
-              mb: 2,
-              border: '1px solid',
-              borderColor: 'info.light',
-            }}
-          >
-            <Typography variant="body2" color="info.dark">
-              {job.message}
-            </Typography>
-          </Box>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {job.message}
+          </Alert>
         )}
 
         {/* Actions */}

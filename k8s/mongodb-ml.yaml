@@ -137,7 +137,7 @@ spec:
           valueFrom:
             configMapKeyRef:
               name: tensorfleet-config
-              key: MONGODB_URL
+              key: mongodb-url
         - name: MONGODB_DB
           value: "tensorfleet"
         resources:
@@ -162,22 +162,8 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: worker-ml-service
-  namespace: tensorfleet
-  labels:
-    app: worker-ml
-    app.kubernetes.io/part-of: tensorfleet
-spec:
-  selector:
-    app: worker-ml
-  ports:
-  - protocol: TCP
-    port: 8000
-    targetPort: 8000
-    name: http-metrics
+# The `worker-ml` ClusterIP Service lives in deployment.yaml (its short DNS
+# name is what the Prometheus scrape config targets).
 ---
 # Model Service Deployment and Service
 apiVersion: apps/v1
@@ -216,7 +202,7 @@ spec:
           valueFrom:
             configMapKeyRef:
               name: tensorfleet-config
-              key: MONGODB_URL
+              key: mongodb-url
         - name: MONGODB_DB
           value: "tensorfleet"
         resources:

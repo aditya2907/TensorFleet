@@ -13,12 +13,24 @@ import {
   Typography,
   Box,
 } from '@mui/material';
+import { useTheme, alpha } from '@mui/material/styles';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { monoFontFamily } from '../theme/typography';
 
 const ModelComparisonDialog = ({ open, onClose, models }) => {
+  const theme = useTheme();
+
   if (!models || models.length === 0) {
     return null;
   }
+
+  const seriesColors = {
+    accuracy: theme.palette.success.main,
+    precision: theme.palette.primary.main,
+    recall: theme.palette.warning.main,
+    f1_score: theme.palette.secondary.main,
+  };
+  const axisTick = { fill: theme.palette.text.secondary, fontSize: 12 };
 
   const metricsData = models.map(model => ({
     name: `${model.name} v${model.version}`,
@@ -37,22 +49,39 @@ const ModelComparisonDialog = ({ open, onClose, models }) => {
         <Box sx={{ height: 400, mb: 4 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={metricsData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
-              <YAxis />
-              <Tooltip formatter={(value, name) => [
-                `${value.toFixed(2)}${name.includes('accuracy') || name.includes('precision') || name.includes('recall') || name.includes('f1') ? '%' : ''}`,
-                name
-              ]} />
-              <Legend />
-              <Bar dataKey="accuracy" fill="#4CAF50" name="Accuracy (%)" />
-              <Bar dataKey="precision" fill="#2196F3" name="Precision (%)" />
-              <Bar dataKey="recall" fill="#FF9800" name="Recall (%)" />
-              <Bar dataKey="f1_score" fill="#9C27B0" name="F1-Score (%)" />
+              <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
+              <XAxis
+                dataKey="name"
+                angle={-45}
+                textAnchor="end"
+                height={80}
+                tick={axisTick}
+                stroke={theme.palette.divider}
+              />
+              <YAxis tick={axisTick} stroke={theme.palette.divider} />
+              <Tooltip
+                formatter={(value, name) => [
+                  `${value.toFixed(2)}${name.includes('accuracy') || name.includes('precision') || name.includes('recall') || name.includes('f1') ? '%' : ''}`,
+                  name
+                ]}
+                cursor={{ fill: alpha(theme.palette.grey[500], 0.08) }}
+                contentStyle={{
+                  backgroundColor: theme.palette.background.paper,
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderRadius: 8,
+                  color: theme.palette.text.primary,
+                }}
+                labelStyle={{ color: theme.palette.text.primary }}
+              />
+              <Legend wrapperStyle={{ color: theme.palette.text.secondary }} />
+              <Bar dataKey="accuracy" fill={seriesColors.accuracy} name="Accuracy (%)" />
+              <Bar dataKey="precision" fill={seriesColors.precision} name="Precision (%)" />
+              <Bar dataKey="recall" fill={seriesColors.recall} name="Recall (%)" />
+              <Bar dataKey="f1_score" fill={seriesColors.f1_score} name="F1-Score (%)" />
             </BarChart>
           </ResponsiveContainer>
         </Box>
-        
+
         <Typography variant="h6" gutterBottom>Details Table</Typography>
         <TableContainer component={Paper}>
           <Table>
@@ -75,7 +104,14 @@ const ModelComparisonDialog = ({ open, onClose, models }) => {
                 return (
                   <TableRow key={modelId}>
                     <TableCell>
-                      <strong>{model.name}</strong> v{model.version}
+                      <Typography
+                        component="span"
+                        variant="body2"
+                        sx={{ fontFamily: monoFontFamily, fontWeight: 600 }}
+                      >
+                        {model.name}
+                      </Typography>{' '}
+                      v{model.version}
                     </TableCell>
                     <TableCell>{model.algorithm_details?.architecture || model.algorithm}</TableCell>
                     <TableCell>

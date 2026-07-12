@@ -21,5 +21,5 @@ MONGODB_DB = os.getenv('MONGODB_DB', 'tensorfleet')
 # Storage Service Configuration
 STORAGE_SERVICE_URL = os.getenv('STORAGE_SERVICE_URL', 'http://storage:8081')
 
-# Prometheus Metrics Port
-METRICS_PORT = 8000
+# Prometheus Metrics Port (9100 by default; 8000 would collide with the API port)
+METRICS_PORT = int(os.getenv('METRICS_PORT', 9100))

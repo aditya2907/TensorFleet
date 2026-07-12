@@ -47,6 +47,20 @@ spec:
     targetPort: 6379
   clusterIP: None
 ---
+# Short-named alias — the ConfigMap and service env vars address "redis:6379"
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: tensorfleet
+spec:
+  selector:
+    app: redis
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+---
 # MinIO deployment
 apiVersion: apps/v1
 kind: StatefulSet

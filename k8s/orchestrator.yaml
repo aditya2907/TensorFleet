@@ -27,7 +27,17 @@ spec:
         - name: PORT
           value: "50051"
         - name: REDIS_ADDR
-          value: "redis:6379"
+          valueFrom:
+            configMapKeyRef:
+              name: tensorfleet-config
+              key: redis-addr
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
         livenessProbe:
           tcpSocket:
             port: 50051
@@ -38,17 +48,5 @@ spec:
             port: 50051
           initialDelaySeconds: 5
           periodSeconds: 5
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: orchestrator-service
-  namespace: tensorfleet
-spec:
-  selector:
-    app: orchestrator
-  ports:
-  - protocol: TCP
-    port: 50051
-    targetPort: 50051
-  clusterIP: None
+# The `orchestrator` ClusterIP Service lives in deployment.yaml alongside the
+# other shared short-named services.

@@ -1,6 +1,7 @@
 """
 ML Worker Service - main service logic
 """
+import os
 import time
 import pickle
 import traceback
@@ -89,7 +90,14 @@ class MLWorkerService:
             # Download dataset from MinIO storage
             try:
                 local_dataset_path = download_dataset(dataset_path)
-                data = pd.read_csv(local_dataset_path)
+                try:
+                    data = pd.read_csv(local_dataset_path)
+                finally:
+                    # Clean up the downloaded temp file once loaded (or on failure)
+                    try:
+                        os.remove(local_dataset_path)
+                    except OSError:
+                        pass
                 logger.info(f"Loaded dataset from {dataset_path} with shape {data.shape}")
             except Exception as e:
                 logger.error(f"Failed to download dataset from storage: {e}")
@@ -129,7 +137,12 @@ class MLWorkerService:
             version = f"v{int(time.time())}"
             
             # Determine model type based on algorithm
-            model_type = 'tensorflow' if algorithm in ['cnn', 'dnn'] else 'sklearn'
+            if algorithm in ['cnn', 'dnn']:
+                model_type = 'tensorflow'
+            elif algorithm.startswith('pytorch_'):
+                model_type = 'pytorch'
+            else:
+                model_type = 'sklearn'
             
             # Prepare metadata
             metadata = {
@@ -152,8 +165,8 @@ class MLWorkerService:
                 'batch_size': hyperparameters.get('batch_size', 32),
                 'learning_rate': hyperparameters.get('learning_rate', 0.001),
                 'optimizer': hyperparameters.get(
-                    'optimizer', 
-                    'adam' if algorithm in ['cnn', 'dnn'] else 'N/A'
+                    'optimizer',
+                    'adam' if model_type in ('tensorflow', 'pytorch') else 'N/A'
                 )
             }
             

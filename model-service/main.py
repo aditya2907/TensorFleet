@@ -10,7 +10,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, Response, stream_with_context
 from flask_cors import CORS
 from pymongo import MongoClient
 from gridfs import GridFS
@@ -49,20 +49,36 @@ class ModelService:
         self.client = None
         self.db = None
         self.fs = None
+        self.connected = False
         self.connect()
-    
+
     def connect(self):
-        """Establish MongoDB connection"""
+        """Establish MongoDB connection (never crashes startup on Mongo outage)"""
         try:
-            self.client = MongoClient(self.mongo_url)
+            self.client = MongoClient(
+                self.mongo_url,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=5000,
+                socketTimeoutMS=30000
+            )
             self.db = self.client[self.db_name]
             self.fs = GridFS(self.db)
             # Test connection
             self.client.admin.command('ping')
-            logger.info(f"Connected to MongoDB at {self.mongo_url}")
+            self.connected = True
+            logger.info("Connected to MongoDB")
         except Exception as e:
-            logger.error(f"Failed to connect to MongoDB: {e}")
-            raise
+            # Don't crash startup on Mongo outage; /health will report unhealthy
+            # and requests will retry via the driver once Mongo is back.
+            self.connected = False
+            logger.error(f"Failed to connect to MongoDB at startup: {e}")
+            return
+
+        # Ensure index used by /statistics aggregation ($group by algorithm)
+        try:
+            self.db['models'].create_index('algorithm')
+        except Exception as e:
+            logger.warning(f"Could not create 'algorithm' index on models: {e}")
     
     def list_models(self, page: int = 1, limit: int = 20, algorithm: Optional[str] = None) -> Dict:
         """List models with pagination and filtering"""
@@ -110,7 +126,8 @@ class ModelService:
             if model_doc:
                 model_doc['id'] = str(model_doc['_id'])
                 del model_doc['_id']
-                model_doc['file_id'] = str(model_doc['file_id'])
+                file_id = model_doc.get('file_id')
+                model_doc['file_id'] = str(file_id) if file_id is not None else None
                 if 'created_at' in model_doc:
                     model_doc['created_at'] = model_doc['created_at'].isoformat()
             return model_doc
@@ -121,24 +138,30 @@ class ModelService:
             logger.error(f"Error getting model metadata {model_id}: {e}")
             return None
     
-    def download_model(self, model_id: str) -> tuple:
-        """Download model file and metadata"""
+    def open_model_stream(self, model_id: str) -> tuple:
+        """Open the model file in GridFS for streaming download.
+
+        Returns (grid_file, filename, error). The caller is responsible for
+        closing grid_file when finished.
+        """
         try:
             model_doc = self.db['models'].find_one({"_id": ObjectId(model_id)})
             if not model_doc:
                 return None, None, "Model not found"
-            
-            # Get model file from GridFS
+
+            file_id = model_doc.get('file_id')
+            if not file_id:
+                return None, None, "Model has no associated file"
+
+            # Get model file handle from GridFS (do not read into memory)
             try:
-                file = self.fs.get(ObjectId(model_doc['file_id']))
-                model_data = file.read()
-                filename = f"{model_doc['name']}_{model_doc['version']}.pkl"
-                
-                return model_data, filename, None
+                grid_file = self.fs.get(ObjectId(file_id))
+                filename = f"{model_doc.get('name', 'model')}_{model_doc.get('version', '1.0')}.pkl"
+                return grid_file, filename, None
             except Exception as e:
                 logger.error(f"Error retrieving model file: {e}")
                 return None, None, f"Error retrieving model file: {e}"
-            
+
         except InvalidId:
             return None, None, "Invalid model ID"
         except Exception as e:
@@ -152,8 +175,10 @@ class ModelService:
             if not model_doc:
                 return False, "Model not found"
             
-            # Delete file from GridFS
-            self.fs.delete(ObjectId(model_doc['file_id']))
+            # Delete file from GridFS (if the model has one)
+            file_id = model_doc.get('file_id')
+            if file_id:
+                self.fs.delete(ObjectId(file_id))
             
             # Delete model document
             self.db['models'].delete_one({"_id": ObjectId(model_id)})
@@ -220,7 +245,10 @@ def health_check():
     API_REQUESTS.labels(endpoint='/health', method='GET').inc()
     try:
         # Test MongoDB connection
+        if model_service.client is None:
+            raise RuntimeError("MongoDB client not initialized")
         model_service.client.admin.command('ping')
+        model_service.connected = True
         return jsonify({
             'status': 'healthy', 
             'service': 'model-service',
@@ -228,6 +256,7 @@ def health_check():
         }), 200
     except Exception as e:
         logger.error(f"Health check failed: {e}")
+        model_service.connected = False
         return jsonify({
             'status': 'unhealthy', 
             'service': 'model-service',
@@ -278,21 +307,31 @@ def download_model(model_id):
     MODEL_DOWNLOADS.labels(model_id=model_id).inc()
     
     try:
-        model_data, filename, error = model_service.download_model(model_id)
-        
+        grid_file, filename, error = model_service.open_model_stream(model_id)
+
         if error:
             return jsonify({'error': error}), 404
-        
-        # Create file-like object from bytes
-        model_file = io.BytesIO(model_data)
-        
-        return send_file(
-            model_file,
-            as_attachment=True,
-            download_name=filename,
-            mimetype='application/octet-stream'
+
+        def generate():
+            try:
+                while True:
+                    chunk = grid_file.read(64 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                grid_file.close()
+
+        headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
+        if grid_file.length is not None:
+            headers['Content-Length'] = str(grid_file.length)
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype='application/octet-stream',
+            headers=headers
         )
-        
+
     except Exception as e:
         logger.error(f"Error downloading model: {e}")
         return jsonify({'error': str(e)}), 500
@@ -347,7 +386,8 @@ def internal_error(error):
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 8083))
-    debug = os.getenv('DEBUG', 'false').lower() == 'true'
-    
+    # Debug mode only when explicitly running a development environment
+    debug = os.getenv('FLASK_ENV', '').lower() == 'development'
+
     logger.info(f"Starting Model Service on port {port}")
     app.run(host='0.0.0.0', port=port, debug=debug)

@@ -1,89 +1,17 @@
-# Redis Deployment and Service
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: redis
-  namespace: tensorfleet
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: redis
-  template:
-    metadata:
-      labels:
-        app: redis
-    spec:
-      containers:
-      - name: redis
-        image: redis:7-alpine
-        ports:
-        - containerPort: 6379
-        livenessProbe:
-          exec:
-            command:
-            - redis-cli
-            - ping
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          exec:
-            command:
-            - redis-cli
-            - ping
-          initialDelaySeconds: 5
-          periodSeconds: 5
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis
-  namespace: tensorfleet
-spec:
-  selector:
-    app: redis
-  ports:
-  - port: 6379
-    targetPort: 6379
----
-# Orchestrator Deployment and Service
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: orchestrator
-  namespace: tensorfleet
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: orchestrator
-  template:
-    metadata:
-      labels:
-        app: orchestrator
-    spec:
-      containers:
-      - name: orchestrator
-        image: tensorfleet/orchestrator:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 50051
-        env:
-        - name: PORT
-          value: "50051"
-        - name: REDIS_ADDR
-          value: "redis:6379"
-        livenessProbe:
-          tcpSocket:
-            port: 50051
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          tcpSocket:
-            port: 50051
-          initialDelaySeconds: 5
-          periodSeconds: 5
----
+# Core application deployments and shared ClusterIP services.
+#
+# Ownership: each Kubernetes object is defined in exactly ONE file.
+#   - redis / minio StatefulSets ............ infrastructure.yaml
+#   - mongodb / worker-ml / model-service ... mongodb-ml.yaml
+#   - api-gateway ........................... api-gateway.yaml
+#   - orchestrator .......................... orchestrator.yaml
+#   - worker (+ HPA) ........................ worker.yaml
+#   - frontend .............................. frontend.yaml
+#   - storage / monitoring / prometheus / grafana ... this file
+#
+# The short-named ClusterIP services (api-gateway, orchestrator, frontend,
+# worker-ml) also live here: their DNS names are referenced by the ConfigMap,
+# the Prometheus scrape config, ingress.yaml and port-forward.sh.
 apiVersion: v1
 kind: Service
 metadata:
@@ -96,74 +24,6 @@ spec:
   - port: 50051
     targetPort: 50051
 ---
-# Worker Deployment
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: worker
-  namespace: tensorfleet
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: worker
-  template:
-    metadata:
-      labels:
-        app: worker
-    spec:
-      containers:
-      - name: worker
-        image: tensorfleet/worker:latest
-        imagePullPolicy: IfNotPresent
-        env:
-        - name: PORT
-          value: "50052"
-        - name: ORCHESTRATOR_ADDR
-          value: "orchestrator:50051"
----
-# API Gateway Deployment and Service
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: api-gateway
-  namespace: tensorfleet
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: api-gateway
-  template:
-    metadata:
-      labels:
-        app: api-gateway
-    spec:
-      containers:
-      - name: api-gateway
-        image: tensorfleet/api-gateway:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 8080
-        env:
-        - name: PORT
-          value: "8080"
-        - name: ORCHESTRATOR_ADDR
-          value: "orchestrator:50051"
-        - name: JOB_ORCHESTRATOR_URL
-          value: "http://monitoring:8082"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -175,6 +35,30 @@ spec:
   ports:
   - port: 8080
     targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: tensorfleet
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 3000
+    targetPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-ml
+  namespace: tensorfleet
+spec:
+  selector:
+    app: worker-ml
+  ports:
+  - port: 8000
+    targetPort: 8000
 ---
 # Storage Service Deployment and Service
 apiVersion: apps/v1
@@ -225,6 +109,13 @@ spec:
             configMapKeyRef:
               name: tensorfleet-config
               key: mongodb-db
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
         livenessProbe:
           httpGet:
             path: /health
@@ -277,6 +168,13 @@ spec:
           value: "8082"
         - name: COMPOSE_PROJECT_NAME
           value: "tensorfleet"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
         livenessProbe:
           httpGet:
             path: /health
@@ -302,47 +200,37 @@ spec:
   - port: 8082
     targetPort: 8082
 ---
-# Frontend Deployment and Service
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: frontend
-  namespace: tensorfleet
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: frontend
-  template:
-    metadata:
-      labels:
-        app: frontend
-    spec:
-      containers:
-      - name: frontend
-        image: tensorfleet/frontend:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 3000
-        env:
-        - name: VITE_API_URL
-          value: "http://api-gateway:8080"
-        - name: VITE_MONITORING_URL
-          value: "http://monitoring:8082"
----
+# Prometheus: ServiceAccount + RBAC so kubernetes_sd pod discovery works
 apiVersion: v1
-kind: Service
+kind: ServiceAccount
 metadata:
-  name: frontend
+  name: prometheus
   namespace: tensorfleet
-spec:
-  selector:
-    app: frontend
-  ports:
-  - port: 3000
-    targetPort: 3000
 ---
-# Prometheus Deployment and Service
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-pod-reader
+  namespace: tensorfleet
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-pod-reader
+  namespace: tensorfleet
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: tensorfleet
+roleRef:
+  kind: Role
+  name: prometheus-pod-reader
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -358,6 +246,7 @@ spec:
       labels:
         app: prometheus
     spec:
+      serviceAccountName: prometheus
       containers:
       - name: prometheus
         image: prom/prometheus:latest
@@ -366,6 +255,13 @@ spec:
         args:
         - '--config.file=/etc/prometheus/prometheus.yml'
         - '--storage.tsdb.path=/prometheus'
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
         volumeMounts:
         - name: prometheus-config
           mountPath: /etc/prometheus
@@ -419,6 +315,13 @@ spec:
           value: "admin"
         - name: GF_INSTALL_PLUGINS
           value: "grafana-piechart-panel"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
         volumeMounts:
         - name: grafana-provisioning
           mountPath: /etc/grafana/provisioning
@@ -443,124 +346,3 @@ spec:
   ports:
   - port: 3001
     targetPort: 3000
----
-# ML Worker Deployment and Service
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: worker-ml
-  namespace: tensorfleet
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: worker-ml
-  template:
-    metadata:
-      labels:
-        app: worker-ml
-    spec:
-      containers:
-      - name: worker-ml
-        image: tensorfleet/worker-ml:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 8000
-        env:
-        - name: PORT
-          value: "8000"
-        - name: MONGODB_URL
-          valueFrom:
-            configMapKeyRef:
-              name: tensorfleet-config
-              key: mongodb-url
-        - name: MONGODB_DB
-          valueFrom:
-            configMapKeyRef:
-              name: tensorfleet-config
-              key: mongodb-db
-        command: ["python", "api_server.py"]
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 30
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: worker-ml
-  namespace: tensorfleet
-spec:
-  selector:
-    app: worker-ml
-  ports:
-  - port: 8000
-    targetPort: 8000
----
-# Model Service Deployment and Service
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: model-service
-  namespace: tensorfleet
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: model-service
-  template:
-    metadata:
-      labels:
-        app: model-service
-    spec:
-      containers:
-      - name: model-service
-        image: tensorfleet/model-service:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 8083
-        env:
-        - name: PORT
-          value: "8083"
-        - name: MONGODB_URL
-          valueFrom:
-            configMapKeyRef:
-              name: tensorfleet-config
-              key: mongodb-url
-        - name: MONGODB_DB
-          valueFrom:
-            configMapKeyRef:
-              name: tensorfleet-config
-              key: mongodb-db
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8083
-          initialDelaySeconds: 30
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8083
-          initialDelaySeconds: 10
-          periodSeconds: 30
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: model-service
-  namespace: tensorfleet
-spec:
-  selector:
-    app: model-service
-  ports:
-  - port: 8083
-    targetPort: 8083

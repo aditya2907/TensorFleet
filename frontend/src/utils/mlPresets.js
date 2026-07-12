@@ -89,6 +89,60 @@ export const MLTrainingPresets = {
       save_checkpoints: true,
     },
   },
+  'pytorch-tabular': {
+    name: 'PyTorch - Tabular Data',
+    description: 'MLP with dropout, a solid default for CSV/tabular datasets',
+    model_type: 'pytorch_mlp',
+    num_workers: 2,
+    epochs: 20,
+    hyperparameters: {
+      learning_rate: 0.001,
+      batch_size: 32,
+      optimizer: 'adam',
+      loss_function: 'sparse_categorical_crossentropy',
+      validation_split: 0.2,
+    },
+    training_config: {
+      early_stopping: true,
+      save_checkpoints: true,
+    },
+  },
+  'pytorch-sequence': {
+    name: 'PyTorch - Sequence Model',
+    description: 'LSTM for ordered/sequential feature data',
+    model_type: 'pytorch_lstm',
+    num_workers: 2,
+    epochs: 25,
+    hyperparameters: {
+      learning_rate: 0.001,
+      batch_size: 32,
+      optimizer: 'adam',
+      loss_function: 'sparse_categorical_crossentropy',
+      validation_split: 0.2,
+    },
+    training_config: {
+      early_stopping: true,
+      save_checkpoints: true,
+    },
+  },
+  'pytorch-transformer': {
+    name: 'PyTorch - Transformer',
+    description: 'Attention-based encoder for complex feature interactions',
+    model_type: 'pytorch_transformer',
+    num_workers: 3,
+    epochs: 30,
+    hyperparameters: {
+      learning_rate: 0.0005,
+      batch_size: 32,
+      optimizer: 'adamw',
+      loss_function: 'sparse_categorical_crossentropy',
+      validation_split: 0.2,
+    },
+    training_config: {
+      early_stopping: true,
+      save_checkpoints: true,
+    },
+  },
   'experimental': {
     name: 'Experimental Setup',
     description: 'For testing and experimentation',
@@ -125,6 +179,11 @@ export const getPresetRecommendations = (modelType, taskType) => {
   // Traditional ML
   if (['random-forest', 'logistic-regression', 'svm', 'decision-tree'].includes(modelType)) {
     recommendations.push('traditional-ml-fast');
+  }
+
+  // PyTorch models
+  if (modelType?.startsWith('pytorch_')) {
+    recommendations.push('pytorch-tabular', 'pytorch-sequence', 'pytorch-transformer');
   }
   
   // Always include experimental

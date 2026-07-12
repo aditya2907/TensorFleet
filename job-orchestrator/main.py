@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
 from celery import Celery
 import os
+import ast
+import json
 import uuid
 from datetime import datetime
 from minio import Minio
@@ -12,14 +14,46 @@ import threading
 app = Flask(__name__)
 
 # Use Redis for job metadata storage
-redis_client = redis.Redis(host=os.getenv('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+redis_client = redis.Redis(
+    host=os.getenv('REDIS_HOST', 'localhost'),
+    port=6379,
+    db=0,
+    decode_responses=True,
+    socket_timeout=5,
+    socket_connect_timeout=5
+)
 
 # Celery configuration
 celery_app = Celery(
     'tasks',
-    broker=os.getenv('CELERY_BROKER_URL', 'amqp://user:password@rabbitmq:5672/'),
+    broker=os.getenv('CELERY_BROKER_URL', 'amqp://guest:guest@rabbitmq:5672//'),
     backend=os.getenv('CELERY_RESULT_BACKEND', 'rpc://')
 )
+
+# Lazily-created module-level gRPC channel (reused across requests)
+_grpc_channel = None
+_grpc_channel_lock = threading.Lock()
+
+def _get_orchestrator_channel():
+    """Return a shared gRPC channel to the orchestrator, creating it once."""
+    global _grpc_channel
+    if _grpc_channel is None:
+        with _grpc_channel_lock:
+            if _grpc_channel is None:
+                import grpc
+                orchestrator_addr = os.getenv('ORCHESTRATOR_ADDR', 'orchestrator:50051')
+                _grpc_channel = grpc.insecure_channel(orchestrator_addr)
+    return _grpc_channel
+
+def _parse_stored_value(value):
+    """Parse a stored job field: JSON first, ast.literal_eval for old records."""
+    try:
+        return json.loads(value)
+    except (ValueError, TypeError):
+        try:
+            return ast.literal_eval(value)
+        except (ValueError, SyntaxError):
+            return value
 
 # MinIO Client
 minio_client = Minio(
@@ -114,11 +148,11 @@ def submit_job():
         "num_workers": str(job_data.get('num_workers', 1)),
         "epochs": str(job_data.get('epochs', 10)),
         "created_at": str(datetime.now()),
-        "hyperparameters": str(hyperparams),
-        "training_config": str(job_data.get('training_config', {})),
-        "metadata": str(job_data.get('metadata', {})),
+        "hyperparameters": json.dumps(hyperparams),
+        "training_config": json.dumps(job_data.get('training_config', {})),
+        "metadata": json.dumps(job_data.get('metadata', {})),
     }
-    redis_client.hmset(f"job:{job_id}", job_metadata)
+    redis_client.hset(f"job:{job_id}", mapping=job_metadata)
     
     return jsonify({
         "job_id": job_id, 
@@ -144,10 +178,12 @@ def get_job_status(job_id):
     if current_status == 'SUCCESS':
         job_info['result'] = task_result.get()
         job_info['completed_at'] = str(datetime.now())
-        
-        # Check if this is the first time we're marking it as completed
-        if job_info.get('status') != 'COMPLETED':
-            job_info['status'] = 'COMPLETED'
+        job_info['status'] = 'COMPLETED'
+
+        # Only auto-save the model once: persist a model_saved flag in Redis
+        if job_info.get('model_saved') != 'true':
+            redis_client.hset(f"job:{job_id}", "model_saved", "true")
+            job_info['model_saved'] = 'true'
             # Trigger auto-save model in background
             threading.Thread(target=auto_save_model, args=(job_id,), daemon=True).start()
     elif current_status == 'FAILURE':
@@ -155,15 +191,12 @@ def get_job_status(job_id):
         job_info['failed_at'] = str(datetime.now())
     elif current_status == 'PENDING':
         job_info['status'] = 'QUEUED'
-    
-    # Convert string values back to appropriate types for display
-    if 'hyperparameters' in job_info:
-        try:
-            import ast
-            job_info['hyperparameters'] = ast.literal_eval(job_info['hyperparameters'])
-        except:
-            pass
-    
+
+    # Convert stored JSON strings back to objects for display
+    for field in ('hyperparameters', 'training_config', 'metadata'):
+        if field in job_info:
+            job_info[field] = _parse_stored_value(job_info[field])
+
     redis_client.hset(f"job:{job_id}", "status", job_info['status'])
     
     return jsonify(job_info)
@@ -171,9 +204,10 @@ def get_job_status(job_id):
 @app.route('/api/v1/jobs', methods=['GET'])
 def list_jobs():
     """Lists all submitted jobs with enhanced formatting."""
-    job_keys = redis_client.keys('job:*')
+    # SCAN instead of KEYS to avoid blocking Redis on large keyspaces
+    job_keys = list(redis_client.scan_iter(match='job:*', count=100))
     jobs = []
-    
+
     for key in job_keys:
         job_info = redis_client.hgetall(key)
         job_id = key.split(':')[-1]
@@ -226,15 +260,15 @@ def get_worker_activity():
     """Gets real-time worker activity data."""
     # This would connect to the orchestrator gRPC service
     # For now, return mock data that matches the structure
-    import grpc
     import sys
-    sys.path.append('/app/proto')
-    
+    if '/app/proto' not in sys.path:
+        sys.path.append('/app/proto')
+
     try:
         from orchestrator import orchestrator_pb2, orchestrator_pb2_grpc
-        
-        orchestrator_addr = os.getenv('ORCHESTRATOR_ADDR', 'orchestrator:50051')
-        channel = grpc.insecure_channel(orchestrator_addr)
+
+        # Reuse a single module-level channel instead of creating one per request
+        channel = _get_orchestrator_channel()
         stub = orchestrator_pb2_grpc.OrchestratorServiceStub(channel)
         
         request = orchestrator_pb2.WorkerActivityRequest()

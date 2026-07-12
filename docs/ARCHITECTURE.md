@@ -491,6 +491,13 @@ func healthCheck() HealthStatus {
 
 ## Performance Characteristics
 
+> The figures below are **design targets**. Measured results — collected with
+> the reproducible harness in [`benchmarks/`](../benchmarks/) — are documented
+> in [PERFORMANCE_EVALUATION.md](PERFORMANCE_EVALUATION.md). Validated so far:
+> API read latency p99 4.2 ms (target <100 ms), job submission p99 223 ms
+> (target <500 ms), and worker-fleet scaling at 85.5% parallel efficiency
+> from 1→8 workers (6.84× speedup).
+
 ### Latency Targets
 - **API Response Time**: <100ms (95th percentile)
 - **Job Submission**: <500ms

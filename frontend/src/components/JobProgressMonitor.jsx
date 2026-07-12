@@ -12,8 +12,12 @@ import {
   ListItem,
   ListItemText,
   Divider,
+  Skeleton,
 } from '@mui/material';
+import QueryStatsRoundedIcon from '@mui/icons-material/QueryStatsRounded';
 import { monitoringAPI } from '../api/api';
+import { usePolling } from '../hooks/usePolling';
+import { monoFontFamily } from '../theme/typography';
 
 const JobProgressMonitor = ({ jobId, jobData }) => {
   const [progress, setProgress] = useState(null);
@@ -21,35 +25,34 @@ const JobProgressMonitor = ({ jobId, jobData }) => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchJobProgress = async () => {
+    if (!jobId) return;
+    try {
+      // Fetch job metrics and progress
+      const response = await monitoringAPI.getJobDetails(jobId);
+      setProgress(response.data.progress || { percentage: 0, current_epoch: 0, total_epochs: 10 });
+      setMetrics(response.data.metrics || { loss: 0.0, accuracy: 0.0 });
+      setLogs(response.data.logs || []);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching job progress:', error);
+      // Set default values on error instead of leaving empty
+      setProgress({ percentage: 0, current_epoch: 0, total_epochs: 10 });
+      setMetrics({ loss: 0.0, accuracy: 0.0 });
+      setLogs([]);
+      setLoading(false);
+    }
+  };
+
+  // Immediate fetch when the selected job changes; usePolling handles the
+  // 5s refresh cadence (and pauses it while the tab is hidden).
   useEffect(() => {
     if (!jobId) return;
-
-    const fetchJobProgress = async () => {
-      try {
-        // Fetch job metrics and progress
-        const response = await monitoringAPI.getJobDetails(jobId);
-        setProgress(response.data.progress || { percentage: 0, current_epoch: 0, total_epochs: 10 });
-        setMetrics(response.data.metrics || { loss: 0.0, accuracy: 0.0 });
-        setLogs(response.data.logs || []);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching job progress:', error);
-        // Set default values on error instead of leaving empty
-        setProgress({ percentage: 0, current_epoch: 0, total_epochs: 10 });
-        setMetrics({ loss: 0.0, accuracy: 0.0 });
-        setLogs([]);
-        setLoading(false);
-      }
-    };
-
-    // Initial fetch
     fetchJobProgress();
-
-    // Set up polling for real-time updates
-    const interval = setInterval(fetchJobProgress, 5000); // Poll every 5 seconds
-
-    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  usePolling(fetchJobProgress, 5000, { enabled: Boolean(jobId), immediate: false });
 
   const getStatusColor = (status) => {
     switch (status?.toUpperCase()) {
@@ -84,13 +87,13 @@ const JobProgressMonitor = ({ jobId, jobData }) => {
     return (
       <Card>
         <CardContent>
-          <Typography variant="h6" gutterBottom>
-            📊 Job Progress
-          </Typography>
-          <LinearProgress />
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            Loading job progress...
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <QueryStatsRoundedIcon fontSize="small" color="primary" />
+            <Typography variant="h6">Training Progress</Typography>
+          </Box>
+          <Skeleton height={12} sx={{ mb: 1 }} />
+          <Skeleton width="60%" />
+          <Skeleton width="40%" />
         </CardContent>
       </Card>
     );
@@ -99,26 +102,25 @@ const JobProgressMonitor = ({ jobId, jobData }) => {
   return (
     <Card>
       <CardContent>
-        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          📊 Training Progress
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <QueryStatsRoundedIcon fontSize="small" color="primary" />
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Training Progress
+          </Typography>
           {jobData?.status && (
-            <Chip 
-              label={jobData.status} 
-              color={getStatusColor(jobData.status)} 
-              size="small" 
+            <Chip
+              label={jobData.status}
+              color={getStatusColor(jobData.status)}
+              size="small"
             />
           )}
-        </Typography>
+        </Box>
 
         {progress && (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <Box sx={{ width: '100%', mr: 1 }}>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={calculateProgress()} 
-                  sx={{ height: 8, borderRadius: 4 }}
-                />
+                <LinearProgress variant="determinate" value={calculateProgress()} color="primary" />
               </Box>
               <Box sx={{ minWidth: 35 }}>
                 <Typography variant="body2" color="text.secondary">
@@ -151,8 +153,8 @@ const JobProgressMonitor = ({ jobId, jobData }) => {
         {metrics && (
           <>
             <Divider sx={{ my: 2 }} />
-            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-              📈 Training Metrics
+            <Typography variant="subtitle2" gutterBottom>
+              Training Metrics
             </Typography>
             <Grid container spacing={2}>
               {metrics.loss && (
@@ -202,16 +204,34 @@ const JobProgressMonitor = ({ jobId, jobData }) => {
         {logs && logs.length > 0 && (
           <>
             <Divider sx={{ my: 2 }} />
-            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-              📝 Recent Logs
+            <Typography variant="subtitle2" gutterBottom>
+              Recent Logs
             </Typography>
-            <Box sx={{ maxHeight: 200, overflow: 'auto', bgcolor: 'grey.50', borderRadius: 1, p: 1 }}>
+            <Box
+              sx={(theme) => ({
+                maxHeight: 200,
+                overflow: 'auto',
+                borderRadius: 1,
+                p: 1,
+                backgroundColor:
+                  theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[900],
+              })}
+            >
               <List dense>
                 {logs.slice(-5).map((log, index) => (
                   <ListItem key={index} disablePadding>
                     <ListItemText
                       primary={
-                        <Typography variant="caption" component="span" sx={{ fontFamily: 'monospace', display: 'block', whiteSpace: 'pre-wrap' }}>
+                        <Typography
+                          variant="caption"
+                          component="span"
+                          sx={(theme) => ({
+                            fontFamily: monoFontFamily,
+                            display: 'block',
+                            whiteSpace: 'pre-wrap',
+                            color: theme.palette.grey[300],
+                          })}
+                        >
                           {log.timestamp ? `[${log.timestamp}] ` : ''}{log.message || log}
                         </Typography>
                       }

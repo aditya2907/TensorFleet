@@ -2,6 +2,8 @@
 Storage service client for dataset and model operations
 """
 import json
+import os
+import tempfile
 import requests
 from io import BytesIO
 from typing import Dict, Any
@@ -40,15 +42,19 @@ def download_dataset(dataset_path: str) -> str:
 
         url = f"{STORAGE_SERVICE_URL}/api/v1/download/{bucket}/{object_name}"
         logger.info(f"Downloading dataset from: {url}")
-        
-        response = requests.get(url)
+
+        # (connect timeout, read timeout) - large datasets can take a while
+        response = requests.get(url, timeout=(5, 300))
         response.raise_for_status()
-        
-        # Save to a temporary file
-        file_path = f"/tmp/{object_name.split('/')[-1]}"
-        with open(file_path, 'wb') as f:
+
+        # Save to a unique temporary file (avoids collisions between
+        # concurrent jobs downloading same-named datasets)
+        basename = object_name.split('/')[-1]
+        suffix = os.path.splitext(basename)[1] or '.dat'
+        fd, file_path = tempfile.mkstemp(prefix='dataset_', suffix=suffix)
+        with os.fdopen(fd, 'wb') as f:
             f.write(response.content)
-            
+
         logger.info(f"Dataset downloaded to: {file_path}")
         return file_path
         

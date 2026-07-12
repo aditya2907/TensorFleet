@@ -24,4 +24,7 @@ COPY . .
 
 EXPOSE 8082
 
-CMD ["python", "main.py"]
+# -w 1 (single worker) is required: scaling state (jobs_data, workers_data,
+# scaling_config, auto-shrink thread) lives in process memory and would
+# diverge across multiple gunicorn workers. Threads provide concurrency.
+CMD ["gunicorn", "-w", "1", "--threads", "8", "-b", "0.0.0.0:8082", "--timeout", "120", "main:app"]

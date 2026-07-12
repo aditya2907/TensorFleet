@@ -5,7 +5,7 @@ metadata:
   namespace: tensorfleet
 data:
   redis-addr: "redis:6379"
-  minio-endpoint: "minio:9000"
+  minio-endpoint: "minio-service:9000"
   minio-secure: "false"
   orchestrator-addr: "orchestrator:50051"
   mongodb-url: "mongodb://admin:password123@mongodb-service:27017/tensorfleet?authSource=admin"  # Default to in-cluster MongoDB for local deployments (change to Atlas URI if needed)

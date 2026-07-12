@@ -51,7 +51,13 @@ class StorageManager:
         mongo_url = os.getenv('MONGODB_URL', 'mongodb://admin:password123@mongodb:27017/tensorfleet?authSource=admin')
         db_name = os.getenv('MONGODB_DB', 'tensorfleet')
         
-        self.mongo_client = MongoClient(mongo_url)
+        self.mongo_client = MongoClient(
+            mongo_url,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            socketTimeoutMS=30000,
+            maxPoolSize=50
+        )
         self.db = self.mongo_client[db_name]
         
         # Ensure buckets and collections exist
@@ -114,6 +120,18 @@ class StorageManager:
                     self.db[collection_name].create_index([index])
                 except Exception as e:
                     logger.warning(f"Index might already exist for {collection_name}: {e}")
+
+        # Compound indexes for common query patterns (job_id filter + created_at sort)
+        compound_indexes = {
+            'models': [[('job_id', 1), ('created_at', -1)]],
+            'checkpoints': [[('job_id', 1), ('created_at', -1)]]
+        }
+        for collection_name, indexes in compound_indexes.items():
+            for index in indexes:
+                try:
+                    self.db[collection_name].create_index(index)
+                except Exception as e:
+                    logger.warning(f"Compound index might already exist for {collection_name}: {e}")
     
     def _calculate_checksum(self, data: bytes) -> str:
         """Calculate MD5 checksum of data"""
@@ -266,19 +284,69 @@ class StorageManager:
             logger.error(f"Error loading model: {e}")
             raise
     
-    def list_models(self, job_id: Optional[str] = None, limit: int = 50) -> List[Dict]:
-        """List models with optional filtering by job_id"""
+    def open_model_stream(self, mongo_id: Optional[str] = None, job_id: Optional[str] = None) -> tuple:
+        """
+        Open a streaming MinIO response for a model without loading it into memory.
+
+        Args:
+            mongo_id: MongoDB document ID
+            job_id: Job ID to stream latest model
+
+        Returns:
+            (minio_response, stat, model_doc) - caller MUST call
+            response.close() and response.release_conn() when done.
+        """
         try:
+            if mongo_id:
+                model_doc = self.db['models'].find_one({"_id": ObjectId(mongo_id)})
+            elif job_id:
+                model_doc = self.db['models'].find_one(
+                    {"job_id": job_id},
+                    sort=[("created_at", -1)]
+                )
+            else:
+                raise ValueError("Either mongo_id or job_id must be provided")
+
+            if not model_doc:
+                raise ValueError("Model not found")
+
+            stat = self.minio_client.stat_object(
+                model_doc['minio_bucket'],
+                model_doc['minio_object']
+            )
+            response = self.minio_client.get_object(
+                model_doc['minio_bucket'],
+                model_doc['minio_object']
+            )
+
+            model_doc['_id'] = str(model_doc['_id'])
+
+            logger.info(f"Streaming model from MinIO: {model_doc['minio_path']}")
+
+            return response, stat, model_doc
+
+        except Exception as e:
+            logger.error(f"Error opening model stream: {e}")
+            raise
+
+    def list_models(self, job_id: Optional[str] = None, limit: int = 50, offset: int = 0) -> List[Dict]:
+        """List models with optional filtering by job_id and pagination"""
+        try:
+            limit = min(max(int(limit), 1), 500)
+            offset = max(int(offset), 0)
             query = {"job_id": job_id} if job_id else {}
-            
-            models = list(self.db['models'].find(
+
+            cursor = self.db['models'].find(
                 query,
                 {
                     '_id': 1, 'job_id': 1, 'name': 1, 'algorithm': 1,
                     'metrics': 1, 'created_at': 1, 'version': 1, 'status': 1,
                     'size_bytes': 1, 'minio_path': 1
                 }
-            ).sort('created_at', -1).limit(limit))
+            ).sort('created_at', -1)
+            if offset:
+                cursor = cursor.skip(offset)
+            models = list(cursor.limit(limit))
             
             # Convert ObjectId to string
             for model in models:
@@ -679,23 +747,28 @@ class StorageManager:
             logger.error(f"Error getting job: {e}")
             return None
     
-    def list_jobs(self, user_id: Optional[str] = None, status: Optional[str] = None, limit: int = 50) -> List[Dict]:
-        """List jobs with optional filtering"""
+    def list_jobs(self, user_id: Optional[str] = None, status: Optional[str] = None, limit: int = 50, offset: int = 0) -> List[Dict]:
+        """List jobs with optional filtering and pagination"""
         try:
+            limit = min(max(int(limit), 1), 500)
+            offset = max(int(offset), 0)
             query = {}
             if user_id:
                 query['user_id'] = user_id
             if status:
                 query['status'] = status
-            
-            jobs = list(self.db['jobs'].find(
+
+            cursor = self.db['jobs'].find(
                 query,
                 {
                     '_id': 1, 'job_id': 1, 'status': 1, 'model_type': 1,
                     'progress': 1, 'created_at': 1, 'completed_at': 1,
                     'current_loss': 1, 'current_accuracy': 1
                 }
-            ).sort('created_at', -1).limit(limit))
+            ).sort('created_at', -1)
+            if offset:
+                cursor = cursor.skip(offset)
+            jobs = list(cursor.limit(limit))
             
             for job in jobs:
                 job['_id'] = str(job['_id'])

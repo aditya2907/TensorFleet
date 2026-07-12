@@ -19,10 +19,16 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: ghcr.io/your-username/tensorfleet/frontend:latest
+        image: tensorfleet/frontend:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
           name: http
+        env:
+        - name: VITE_API_URL
+          value: "http://api-gateway:8080"
+        - name: VITE_MONITORING_URL
+          value: "http://monitoring:8082"
         resources:
           requests:
             memory: "128Mi"

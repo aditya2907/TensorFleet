@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Card,
@@ -19,17 +19,33 @@ import {
   Skeleton,
   CircularProgress
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import {
   Add as AddIcon,
   Remove as RemoveIcon,
   Refresh as RefreshIcon,
   Settings as SettingsIcon,
   PlayArrow as PlayIcon,
-  Stop as StopIcon,
-  TrendingDown as TrendingDownIcon,
-  TrendingUp as TrendingUpIcon
+  TrendingDown as TrendingDownIcon
 } from '@mui/icons-material';
-import { monitoringAPI } from '../api/api';
+import { monitoringAPI, getErrorMessage } from '../api/api';
+import { usePolling } from '../hooks/usePolling';
+
+// Overline label + h3 stat number, per the design system.
+const StatNumber = ({ label, value, loading }) => (
+  <Box sx={{ minWidth: 0 }}>
+    <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+      {label}
+    </Typography>
+    {loading ? (
+      <Skeleton width={56} height={40} />
+    ) : (
+      <Typography variant="h3" sx={{ fontWeight: 700, lineHeight: 1.15 }}>
+        {value ?? '—'}
+      </Typography>
+    )}
+  </Box>
+);
 
 const WorkerScalingControl = () => {
   const [workerCount, setWorkerCount] = useState(3);
@@ -48,16 +64,6 @@ const WorkerScalingControl = () => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [isScaling, setIsScaling] = useState(false);
   const [actualWorkerCount, setActualWorkerCount] = useState(0);
-
-  useEffect(() => {
-    fetchScalingConfig();
-    fetchActualWorkerCount();
-    const interval = setInterval(() => {
-      fetchScalingConfig();
-      fetchActualWorkerCount();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   const fetchActualWorkerCount = async () => {
     try {
@@ -87,37 +93,42 @@ const WorkerScalingControl = () => {
     }
   };
 
+  usePolling(() => {
+    fetchScalingConfig();
+    fetchActualWorkerCount();
+  }, 5000);
+
   const scaleWorkers = async (count) => {
     setIsScaling(true);
     setMessage({ type: '', text: '' });
-    
+
     try {
       const response = await monitoringAPI.post('/api/v1/scaling/workers', {
         worker_count: count
       });
-      
+
       setMessage({
         type: 'success',
         text: response.data.message || `Successfully scaled workers to ${count}`
       });
-      
+
       setWorkerCount(count);
       setTargetWorkers(count);
-      
+
       // Refresh config after scaling
       setTimeout(fetchScalingConfig, 2000);
     } catch (error) {
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to scale workers';
+      const errorMessage = getErrorMessage(error);
       setMessage({
         type: 'error',
         text: errorMessage
       });
-      
+
       // If Docker socket error, show helpful message
       if (errorMessage.includes('docker') || errorMessage.includes('socket')) {
         setMessage({
           type: 'info',
-          text: '⚠️ Docker scaling requires additional configuration. Use manual scaling or deploy to Kubernetes for auto-scaling.'
+          text: 'Docker scaling requires additional configuration. Use manual scaling or deploy to Kubernetes for auto-scaling.'
         });
       }
     } finally {
@@ -141,21 +152,21 @@ const WorkerScalingControl = () => {
 
   const toggleAutoShrink = async () => {
     try {
-      const response = await monitoringAPI.post('/api/v1/scaling/auto-shrink', {
+      await monitoringAPI.post('/api/v1/scaling/auto-shrink', {
         enabled: !autoShrinkEnabled
       });
-      
+
       setAutoShrinkEnabled(!autoShrinkEnabled);
       setMessage({
         type: 'success',
         text: `Auto-shrink ${!autoShrinkEnabled ? 'enabled' : 'disabled'}`
       });
-      
+
       // Update config
       await monitoringAPI.post('/api/v1/scaling/config', {
         auto_scale_enabled: !autoShrinkEnabled
       });
-      
+
     } catch (error) {
       setMessage({
         type: 'error',
@@ -169,16 +180,15 @@ const WorkerScalingControl = () => {
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <SettingsIcon />
+            <SettingsIcon fontSize="small" color="primary" />
             <Typography variant="h6">
               Worker Scaling Control
             </Typography>
             {!loading && (
-              <Chip 
-                size="small" 
-                label="Connected" 
-                color="success" 
-                variant="outlined"
+              <Chip
+                size="small"
+                label="Connected"
+                color="success"
                 sx={{ ml: 1 }}
               />
             )}
@@ -194,35 +204,23 @@ const WorkerScalingControl = () => {
           </Alert>
         )}
 
-        <Grid container spacing={3}>
+        <Grid container spacing={2.5}>
           {/* Current Status */}
           <Grid item xs={12} md={6}>
-            <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-              <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-                Active Workers
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-                <Typography variant="h3" color="primary.main">
-                  {actualWorkerCount}
-                </Typography>
-                {actualWorkerCount !== workerCount && (
-                  <Chip 
-                    size="small" 
-                    label={`Target: ${workerCount}`}
-                    color="info"
-                    variant="outlined"
-                  />
-                )}
-              </Box>
-              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                <Chip 
-                  size="small" 
-                  label={`Min: ${scalingConfig.min_workers}`} 
+            <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, height: '100%' }}>
+              <Stack direction="row" spacing={4}>
+                <StatNumber label="Active Workers" value={actualWorkerCount} loading={loading} />
+                <StatNumber label="Target" value={workerCount} loading={loading} />
+              </Stack>
+              <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+                <Chip
+                  size="small"
+                  label={`Min: ${scalingConfig.min_workers}`}
                   variant="outlined"
                 />
-                <Chip 
-                  size="small" 
-                  label={`Max: ${scalingConfig.max_workers}`} 
+                <Chip
+                  size="small"
+                  label={`Max: ${scalingConfig.max_workers}`}
                   variant="outlined"
                 />
               </Stack>
@@ -231,8 +229,19 @@ const WorkerScalingControl = () => {
 
           {/* Auto-Shrink Status */}
           <Grid item xs={12} md={6}>
-            <Box sx={{ p: 2, bgcolor: autoShrinkEnabled ? 'success.50' : 'grey.50', borderRadius: 1 }}>
-              <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+            <Box
+              sx={(theme) => ({
+                p: 2,
+                borderRadius: 2,
+                height: '100%',
+                border: '1px solid',
+                borderColor: theme.palette.divider,
+                backgroundColor: autoShrinkEnabled
+                  ? alpha(theme.palette.success.main, theme.palette.mode === 'dark' ? 0.16 : 0.08)
+                  : 'transparent',
+              })}
+            >
+              <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
                 Auto-Scaling Status
               </Typography>
               <FormControlLabel
@@ -240,7 +249,6 @@ const WorkerScalingControl = () => {
                   <Switch
                     checked={autoShrinkEnabled}
                     onChange={toggleAutoShrink}
-                    color="success"
                   />
                 }
                 label={
@@ -248,9 +256,9 @@ const WorkerScalingControl = () => {
                     <Typography variant="body1">
                       {autoShrinkEnabled ? 'Enabled' : 'Disabled'}
                     </Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      {autoShrinkEnabled 
-                        ? 'Workers auto-scale based on load' 
+                    <Typography variant="caption" color="text.secondary">
+                      {autoShrinkEnabled
+                        ? 'Workers auto-scale based on load'
                         : 'Manual scaling only'}
                     </Typography>
                   </Box>
@@ -275,7 +283,6 @@ const WorkerScalingControl = () => {
                   startIcon={<RemoveIcon />}
                   onClick={handleScaleDown}
                   disabled={isScaling || workerCount <= scalingConfig.min_workers}
-                  color="warning"
                 >
                   Scale Down
                 </Button>
@@ -288,7 +295,6 @@ const WorkerScalingControl = () => {
                   startIcon={<AddIcon />}
                   onClick={handleScaleUp}
                   disabled={isScaling || workerCount >= scalingConfig.max_workers}
-                  color="success"
                 >
                   Scale Up
                 </Button>
@@ -337,7 +343,7 @@ const WorkerScalingControl = () => {
               variant="contained"
               onClick={handleApplyTarget}
               disabled={isScaling || targetWorkers === workerCount || loading}
-              startIcon={isScaling ? <CircularProgress size={16} /> : <PlayIcon />}
+              startIcon={isScaling ? <CircularProgress size={16} color="inherit" /> : <PlayIcon />}
             >
               {isScaling ? 'Scaling...' : 'Apply'}
             </Button>
@@ -346,14 +352,21 @@ const WorkerScalingControl = () => {
 
         {/* Scaling Thresholds (Info Only) */}
         {autoShrinkEnabled && (
-          <Box sx={{ mt: 3, p: 2, bgcolor: 'info.50', borderRadius: 1 }}>
+          <Box
+            sx={(theme) => ({
+              mt: 3,
+              p: 2,
+              borderRadius: 2,
+              backgroundColor: alpha(theme.palette.info.main, theme.palette.mode === 'dark' ? 0.16 : 0.08),
+            })}
+          >
             <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <TrendingDownIcon fontSize="small" />
+              <TrendingDownIcon fontSize="small" color="info" />
               Auto-Scaling Thresholds
             </Typography>
             <Grid container spacing={2}>
               <Grid item xs={6}>
-                <Typography variant="caption" color="textSecondary">
+                <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
                   Scale Down
                 </Typography>
                 <Typography variant="body2">
@@ -361,7 +374,7 @@ const WorkerScalingControl = () => {
                 </Typography>
               </Grid>
               <Grid item xs={6}>
-                <Typography variant="caption" color="textSecondary">
+                <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
                   Scale Up
                 </Typography>
                 <Typography variant="body2">
@@ -371,19 +384,6 @@ const WorkerScalingControl = () => {
             </Grid>
           </Box>
         )}
-
-        {/* Info Box
-        <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-          <Typography variant="caption" color="textSecondary" component="div">
-            <strong>💡 Scaling Tips:</strong>
-            <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-              <li>Auto-scaling monitors worker utilization every 10 seconds</li>
-              <li>Scales up when utilization {'>'} 80%, down when {'<'} 30%</li>
-              <li>Manual scaling takes effect immediately</li>
-              <li>For production, use Kubernetes HPA (configured in k8s/worker.yaml)</li>
-            </ul>
-          </Typography>
-        </Box> */}
       </CardContent>
     </Card>
   );

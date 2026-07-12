@@ -55,7 +55,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: minio
+            name: minio-service
             port:
               number: 9001
       - path: /()(.*)

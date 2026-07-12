@@ -37,7 +37,7 @@ spec:
           valueFrom:
             configMapKeyRef:
               name: tensorfleet-config
-              key: ORCHESTRATOR_ADDR
+              key: orchestrator-addr
         resources:
           requests:
             memory: "512Mi"

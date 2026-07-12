@@ -1,12 +1,19 @@
 """
 ML Model Trainer - handles training for different algorithms
 """
+from __future__ import annotations  # keeps tf.* annotations lazy when TF is absent
+
 import time
 from typing import Dict, Tuple, Any
 
 import numpy as np
 import pandas as pd
-import tensorflow as tf
+
+try:
+    import tensorflow as tf
+except ImportError:  # TF is optional — only needed for the cnn/dnn algorithms
+    tf = None
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
@@ -163,6 +170,10 @@ class MLModelTrainer:
         Returns:
             Tuple of (trained_model, metrics_dict)
         """
+        if tf is None:
+            raise ImportError(
+                "tensorflow is not installed — required for 'cnn'/'dnn' algorithms"
+            )
         logger.info(f"Starting TensorFlow training for {algorithm} model...")
         start_time = time.time()
 
@@ -348,6 +359,13 @@ class MLModelTrainer:
                 return self.train_tensorflow_model(
                     algorithm, X_train, X_test, y_train, y_test, hyperparameters
                 )
+            elif algorithm.startswith('pytorch_'):
+                # Imported lazily so the service still runs without torch
+                # installed when only sklearn/TF algorithms are used.
+                from pytorch_trainer import train_pytorch_model
+                return train_pytorch_model(
+                    algorithm, X_train, X_test, y_train, y_test, hyperparameters
+                )
             else:
                 return self.train_sklearn_model(
                     algorithm, X_train, X_test, y_train, y_test, hyperparameters
@@ -383,6 +401,49 @@ def get_default_hyperparameters(algorithm: str) -> Dict[str, Any]:
         },
         'decision_tree': {
             'max_depth': None,
+            'random_state': 42
+        },
+        'pytorch_logistic': {
+            'epochs': 20,
+            'batch_size': 32,
+            'learning_rate': 0.01,
+            'optimizer': 'adam',
+            'random_state': 42
+        },
+        'pytorch_mlp': {
+            'epochs': 20,
+            'batch_size': 32,
+            'learning_rate': 0.001,
+            'optimizer': 'adam',
+            'hidden_layers': [128, 64],
+            'dropout': 0.2,
+            'random_state': 42
+        },
+        'pytorch_cnn': {
+            'epochs': 15,
+            'batch_size': 32,
+            'learning_rate': 0.001,
+            'optimizer': 'adam',
+            'random_state': 42
+        },
+        'pytorch_lstm': {
+            'epochs': 20,
+            'batch_size': 32,
+            'learning_rate': 0.001,
+            'optimizer': 'adam',
+            'hidden_size': 64,
+            'num_layers': 1,
+            'random_state': 42
+        },
+        'pytorch_transformer': {
+            'epochs': 20,
+            'batch_size': 32,
+            'learning_rate': 0.0005,
+            'optimizer': 'adamw',
+            'd_model': 32,
+            'nhead': 4,
+            'num_encoder_layers': 2,
+            'dropout': 0.1,
             'random_state': 42
         }
     }

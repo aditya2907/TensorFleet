@@ -5,60 +5,45 @@ const MONITORING_URL = import.meta.env.VITE_MONITORING_URL || 'http://localhost:
 const MODEL_SERVICE_URL = import.meta.env.VITE_MODEL_SERVICE_URL || 'http://localhost:8083';
 const STORAGE_URL = import.meta.env.VITE_STORAGE_URL || 'http://localhost:8081';
 
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    'X-User-ID': 'tensorfleet-user',
-    'Authorization': 'Bearer demo-token', // For demo purposes
-  },
-});
+const DEFAULT_TIMEOUT_MS = 15000;
+const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
-// Add request interceptor for authentication
+const createClient = (baseURL, extraHeaders = {}) =>
+  axios.create({
+    baseURL,
+    timeout: DEFAULT_TIMEOUT_MS,
+    headers: {
+      'Content-Type': 'application/json',
+      ...extraHeaders,
+    },
+  });
+
+const apiClient = createClient(API_BASE_URL, { 'X-User-ID': 'tensorfleet-user' });
+
 apiClient.interceptors.request.use((config) => {
-  // In a real app, you'd get the token from localStorage or similar
   const token = localStorage.getItem('authToken') || 'demo-token';
   config.headers.Authorization = `Bearer ${token}`;
   return config;
-}, (error) => {
-  return Promise.reject(error);
 });
 
-// Add response interceptor for error handling
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Handle authentication error
-      console.warn('Authentication failed, using demo token');
-    }
-    return Promise.reject(error);
-  }
-);
+const monitoringClient = createClient(MONITORING_URL);
+const modelServiceClient = createClient(MODEL_SERVICE_URL);
+const storageClient = createClient(STORAGE_URL);
 
-const monitoringClient = axios.create({
-  baseURL: MONITORING_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-const modelServiceClient = axios.create({
-  baseURL: MODEL_SERVICE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-const storageClient = axios.create({
-  baseURL: STORAGE_URL,
-});
+// Normalizes axios errors into a human-readable message for notifications.
+export const getErrorMessage = (error) => {
+  if (error?.code === 'ECONNABORTED') return 'Request timed out — the service may be unavailable';
+  if (error?.response?.data?.error) return error.response.data.error;
+  if (error?.response?.data?.message) return error.response.data.message;
+  if (error?.response?.status) return `Request failed with status ${error.response.status}`;
+  return error?.message || 'Unknown error';
+};
 
 // Job API
 export const jobsAPI = {
   submitJob: (jobData) => apiClient.post('/api/v1/jobs', jobData),
   getJobStatus: (jobId) => apiClient.get(`/api/v1/jobs/${jobId}`),
-  listJobs: () => apiClient.get('/api/v1/jobs'),
+  listJobs: (params) => apiClient.get('/api/v1/jobs', { params }),
   cancelJob: (jobId) => apiClient.delete(`/api/v1/jobs/${jobId}`),
 };
 
@@ -66,7 +51,11 @@ export const jobsAPI = {
 export const modelServiceAPI = {
   listModels: (params) => modelServiceClient.get('/api/v1/models', { params }),
   getModel: (modelId) => modelServiceClient.get(`/api/v1/models/${modelId}`),
-  downloadModel: (modelId) => modelServiceClient.get(`/api/v1/models/${modelId}/download`, { responseType: 'blob' }),
+  downloadModel: (modelId) =>
+    modelServiceClient.get(`/api/v1/models/${modelId}/download`, {
+      responseType: 'blob',
+      timeout: UPLOAD_TIMEOUT_MS,
+    }),
 };
 
 // Storage API
@@ -79,65 +68,66 @@ export const storageAPI = {
     const formData = new FormData();
     formData.append('file', file);
     return storageClient.post(`/api/v1/upload/datasets/${file.name}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: UPLOAD_TIMEOUT_MS,
       onUploadProgress,
     });
   },
   deleteDataset: (objectName) => storageClient.delete(`/api/v1/delete/datasets/${objectName}`),
-  
+
   // Models
   listModels: () => storageClient.get('/api/v1/list/models'),
   uploadModel: (file, modelPath, onUploadProgress) => {
     const formData = new FormData();
     formData.append('file', file);
     return storageClient.post(`/api/v1/upload/models/${modelPath}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: UPLOAD_TIMEOUT_MS,
       onUploadProgress,
     });
   },
   deleteModel: (objectName) => storageClient.delete(`/api/v1/delete/models/${objectName}`),
-  
+
   // Checkpoints
   listCheckpoints: () => storageClient.get('/api/v1/list/checkpoints'),
   deleteCheckpoint: (objectName) => storageClient.delete(`/api/v1/delete/checkpoints/${objectName}`),
-  
+
   // Artifacts
   listArtifacts: () => storageClient.get('/api/v1/list/artifacts'),
   deleteArtifact: (objectName) => storageClient.delete(`/api/v1/delete/artifacts/${objectName}`),
-  
+
   // Jobs
   listJobFiles: () => storageClient.get('/api/v1/list/jobs'),
   deleteJobFile: (objectName) => storageClient.delete(`/api/v1/delete/jobs/${objectName}`),
-  
+
   // General storage operations
   getStorageStats: () => storageClient.get('/api/v1/storage/stats'),
   getBuckets: () => storageClient.get('/api/v1/buckets'),
-  
+
   // Database operations for metadata
   createModel: (modelData) => storageClient.post('/api/v1/models', modelData),
   getModels: () => storageClient.get('/api/v1/models'),
   getModel: (modelId) => storageClient.get(`/api/v1/models/${modelId}`, { responseType: 'blob' }),
-  downloadModel: (modelId) => storageClient.get(`/api/v1/models/${modelId}`, { responseType: 'blob' }),
-  
+  downloadModel: (modelId) =>
+    storageClient.get(`/api/v1/models/${modelId}`, {
+      responseType: 'blob',
+      timeout: UPLOAD_TIMEOUT_MS,
+    }),
+
   createJob: (jobData) => storageClient.post('/api/v1/jobs', jobData),
   getJobs: () => storageClient.get('/api/v1/jobs'),
   getJob: (jobId) => storageClient.get(`/api/v1/jobs/${jobId}`),
   updateJob: (jobId, jobData) => storageClient.put(`/api/v1/jobs/${jobId}`, jobData),
-  getRecentJobs: (limit = 50) => storageClient.get(`/api/v1/jobs/recent?limit=${limit}`),
-  
+  getRecentJobs: (limit = 50) => storageClient.get('/api/v1/jobs/recent', { params: { limit } }),
+
   createDataset: (datasetData) => storageClient.post('/api/v1/datasets', datasetData),
-  // getDatasets is already defined above
-  
+
   createCheckpoint: (checkpointData) => storageClient.post('/api/v1/checkpoints', checkpointData),
   getCheckpoints: (jobId) => storageClient.get(`/api/v1/checkpoints/${jobId}`),
-  
+
   createArtifact: (artifactData) => storageClient.post('/api/v1/artifacts', artifactData),
   getArtifacts: (jobId) => storageClient.get(`/api/v1/artifacts/${jobId}`),
-  
+
   // Automatic model saving for job completion
   autoSaveModel: (jobId) => storageClient.post(`/api/v1/jobs/${jobId}/auto-save-model`),
 };
@@ -150,7 +140,7 @@ export const monitoringAPI = {
   getWorkerMetrics: () => monitoringClient.get('/api/v1/metrics/workers'),
   getJobDetails: (jobId) => monitoringClient.get(`/api/v1/metrics/jobs/${jobId}`),
   getWorkerActivity: () => apiClient.get('/worker-activity'),
-  
+
   // Worker Scaling API
   get: (endpoint) => monitoringClient.get(endpoint),
   post: (endpoint, data) => monitoringClient.post(endpoint, data),

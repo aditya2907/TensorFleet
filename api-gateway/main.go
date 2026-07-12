@@ -7,7 +7,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 
 	orchestratorpb "github.com/tensorfleet/api-gateway/proto/orchestrator"
 )
@@ -35,8 +41,23 @@ func max(a, b int64) int64 {
 	return b
 }
 
+// JobRecord is the canonical representation of a job stored in Redis.
+// Its JSON tags match exactly what handleSubmitJob writes, so the same
+// struct is used for both storing and reading job metadata.
+type JobRecord struct {
+	JobID          string `json:"job_id"`
+	UserID         string `json:"user_id"`
+	ModelType      string `json:"model_type"`
+	DatasetPath    string `json:"dataset_path"`
+	Status         string `json:"status"`
+	TotalTasks     int32  `json:"total_tasks"`
+	CompletedTasks int32  `json:"completed_tasks"`
+	CreatedAt      int64  `json:"created_at"` // Unix seconds
+}
+
 type GatewayServer struct {
 	orchestratorClient orchestratorpb.OrchestratorServiceClient
+	grpcConn           *grpc.ClientConn
 	redisClient        *redis.Client
 	router             *gin.Engine
 }
@@ -49,7 +70,14 @@ func NewGatewayServer() (*GatewayServer, error) {
 	}
 
 	log.Printf("Connecting to orchestrator at %s", orchestratorAddr)
-	conn, err := grpc.Dial(orchestratorAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(orchestratorAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                30 * time.Second,
+			Timeout:             10 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +106,34 @@ func NewGatewayServer() (*GatewayServer, error) {
 	}
 
 	router := gin.Default()
-	
+
+	// Allowed CORS origins, configurable via CORS_ALLOWED_ORIGINS
+	// (comma-separated). Defaults to "*" to preserve dev behavior.
+	allowedOrigins := []string{"*"}
+	if envOrigins := os.Getenv("CORS_ALLOWED_ORIGINS"); envOrigins != "" {
+		allowedOrigins = allowedOrigins[:0]
+		for _, o := range strings.Split(envOrigins, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				allowedOrigins = append(allowedOrigins, o)
+			}
+		}
+	}
+	allowAllOrigins := len(allowedOrigins) == 1 && allowedOrigins[0] == "*"
+
 	// Add CORS middleware
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		if allowAllOrigins {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		} else {
+			origin := c.GetHeader("Origin")
+			for _, allowed := range allowedOrigins {
+				if origin == allowed {
+					c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+					c.Writer.Header().Set("Vary", "Origin")
+					break
+				}
+			}
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-User-ID, x-user-id")
 		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Type")
@@ -94,6 +146,7 @@ func NewGatewayServer() (*GatewayServer, error) {
 
 	gs := &GatewayServer{
 		orchestratorClient: client,
+		grpcConn:           conn,
 		redisClient:        rdb,
 		router:             router,
 	}
@@ -153,7 +206,7 @@ func (gs *GatewayServer) handleSubmitJob(c *gin.Context) {
 		req.Epochs = 10
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Forward to orchestrator
@@ -174,15 +227,15 @@ func (gs *GatewayServer) handleSubmitJob(c *gin.Context) {
 	}
 
 	// Store job metadata in Redis for history
-	jobMetadata := map[string]interface{}{
-		"job_id":       jobID,
-		"user_id":      userID,
-		"model_type":   req.ModelType,
-		"dataset_path": req.DatasetPath,
-		"status":       resp.Status,
-		"total_tasks":  resp.NumTasks,
-		"completed_tasks": 0,
-		"created_at":   time.Now().Unix(),
+	jobMetadata := JobRecord{
+		JobID:          jobID,
+		UserID:         userID,
+		ModelType:      req.ModelType,
+		DatasetPath:    req.DatasetPath,
+		Status:         resp.Status,
+		TotalTasks:     resp.NumTasks,
+		CompletedTasks: 0,
+		CreatedAt:      time.Now().Unix(),
 	}
 
 	jobJSON, err := json.Marshal(jobMetadata)
@@ -323,7 +376,9 @@ func (gs *GatewayServer) handleGetJobLogs(c *gin.Context) {
 				return
 			} else if resp.Status == "RUNNING" {
 				// Get worker activity for detailed logging
-				workerResp, err := gs.orchestratorClient.GetWorkerActivity(context.Background(), &orchestratorpb.WorkerActivityRequest{})
+				workerCtx, workerCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				workerResp, err := gs.orchestratorClient.GetWorkerActivity(workerCtx, &orchestratorpb.WorkerActivityRequest{})
+				workerCancel()
 				activeWorkers := 0
 				var workerDetails []string
 				
@@ -387,109 +442,147 @@ func (gs *GatewayServer) handleListJobs(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Get all job keys from Redis
-	keys, err := gs.redisClient.Keys(ctx, "job:*").Result()
-	if err != nil {
-		log.Printf("Error fetching job keys from Redis: %v", err)
-		c.JSON(http.StatusOK, gin.H{
-			"jobs":  []interface{}{},
-			"total": 0,
-		})
-		return
+	// Pagination params: limit (default 50, max 200) and offset (default 0)
+	limit := 50
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset := 0
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	// Get all job keys from Redis using SCAN (non-blocking, unlike KEYS)
+	var keys []string
+	var cursor uint64
+	for {
+		batch, nextCursor, err := gs.redisClient.Scan(ctx, cursor, "job:*", 100).Result()
+		if err != nil {
+			log.Printf("Error scanning job keys from Redis: %v", err)
+			c.JSON(http.StatusOK, gin.H{
+				"jobs":   []interface{}{},
+				"total":  0,
+				"limit":  limit,
+				"offset": offset,
+			})
+			return
+		}
+		keys = append(keys, batch...)
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
 	}
 
 	type JobSummary struct {
-		JobID        string  `json:"job_id"`
-		ModelType    string  `json:"model_type"`
-		Status       string  `json:"status"`
-		Progress     int32   `json:"progress"`
-		TotalTasks   int32   `json:"total_tasks"`
-		CompletedTasks int32 `json:"completed_tasks"`
-		CreatedAt    int64   `json:"created_at"`
-		UserID       string  `json:"user_id,omitempty"`
+		JobID          string `json:"job_id"`
+		ModelType      string `json:"model_type"`
+		Status         string `json:"status"`
+		Progress       int32  `json:"progress"`
+		TotalTasks     int32  `json:"total_tasks"`
+		CompletedTasks int32  `json:"completed_tasks"`
+		CreatedAt      int64  `json:"created_at"`
+		UserID         string `json:"user_id,omitempty"`
 	}
 
-	jobs := []JobSummary{}
-
+	// Load and parse all job records from Redis
+	records := []JobRecord{}
 	for _, key := range keys {
-		// Get job data from Redis
 		jobData, err := gs.redisClient.Get(ctx, key).Result()
 		if err != nil {
 			log.Printf("Error fetching job %s: %v", key, err)
 			continue
 		}
 
-		// Parse job data (field names match orchestrator's uppercase format)
-		var job struct {
-			JobID          string `json:"JobID"`
-			UserID         string `json:"UserID"`
-			ModelType      string `json:"ModelType"`
-			DatasetPath    string `json:"DatasetPath"`
-			Status         string `json:"Status"`
-			TotalTasks     int32  `json:"TotalTasks"`
-			CompletedTasks int32  `json:"CompletedTasks"`
-			CreatedAt      string `json:"CreatedAt"` // RFC3339 timestamp
-		}
-
+		var job JobRecord
 		if err := json.Unmarshal([]byte(jobData), &job); err != nil {
 			log.Printf("Error parsing job %s: %v", key, err)
 			continue
 		}
-
-		// Calculate progress
-		progress := int32(0)
-		if job.TotalTasks > 0 {
-			progress = int32(float64(job.CompletedTasks) / float64(job.TotalTasks) * 100)
-		}
-
-		// Try to get fresh status from orchestrator
-		statusResp, err := gs.orchestratorClient.GetJobStatus(ctx, &orchestratorpb.GetJobStatusRequest{
-			JobId: job.JobID,
-		})
-
-		if err == nil && statusResp != nil {
-			job.Status = statusResp.Status
-			job.CompletedTasks = statusResp.CompletedTasks
-			job.TotalTasks = statusResp.TotalTasks
-			progress = statusResp.Progress
-		}
-
-		// Parse timestamp
-		createdAtUnix := int64(0)
-		if job.CreatedAt != "" {
-			if t, err := time.Parse(time.RFC3339, job.CreatedAt); err == nil {
-				createdAtUnix = t.Unix()
-			}
-		}
-
-		jobs = append(jobs, JobSummary{
-			JobID:          job.JobID,
-			ModelType:      job.ModelType,
-			Status:         job.Status,
-			Progress:       progress,
-			TotalTasks:     job.TotalTasks,
-			CompletedTasks: job.CompletedTasks,
-			CreatedAt:      createdAtUnix,
-			UserID:         job.UserID,
-		})
+		records = append(records, job)
 	}
 
-	// Sort jobs by creation time (newest first)
-	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].CreatedAt > jobs[j].CreatedAt
+	// Sort jobs by creation time (newest first) before paginating
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].CreatedAt > records[j].CreatedAt
 	})
 
+	total := len(records)
+
+	// Apply pagination
+	start := offset
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	page := records[start:end]
+
+	// Concurrently refresh statuses from the orchestrator for the current
+	// page, bounded by a semaphore. On error, keep the Redis-stored status.
+	jobs := make([]JobSummary, len(page))
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for i, rec := range page {
+		wg.Add(1)
+		go func(i int, job JobRecord) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Progress calculated from the Redis-stored counts as fallback
+			progress := int32(0)
+			if job.TotalTasks > 0 {
+				progress = int32(float64(job.CompletedTasks) / float64(job.TotalTasks) * 100)
+			}
+
+			statusCtx, statusCancel := context.WithTimeout(ctx, 3*time.Second)
+			statusResp, err := gs.orchestratorClient.GetJobStatus(statusCtx, &orchestratorpb.GetJobStatusRequest{
+				JobId: job.JobID,
+			})
+			statusCancel()
+
+			if err == nil && statusResp != nil {
+				job.Status = statusResp.Status
+				job.CompletedTasks = statusResp.CompletedTasks
+				job.TotalTasks = statusResp.TotalTasks
+				progress = statusResp.Progress
+			}
+
+			jobs[i] = JobSummary{
+				JobID:          job.JobID,
+				ModelType:      job.ModelType,
+				Status:         job.Status,
+				Progress:       progress,
+				TotalTasks:     job.TotalTasks,
+				CompletedTasks: job.CompletedTasks,
+				CreatedAt:      job.CreatedAt,
+				UserID:         job.UserID,
+			}
+		}(i, rec)
+	}
+	wg.Wait()
+
 	c.JSON(http.StatusOK, gin.H{
-		"jobs":  jobs,
-		"total": len(jobs),
+		"jobs":   jobs,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
 	})
 }
 
 func (gs *GatewayServer) handleWorkerActivity(c *gin.Context) {
-	log.Printf("!!! FIXED HANDLER CALLED !!! Using gRPC instead of HTTP proxy")
-	
 	// Get worker activity directly from orchestrator via gRPC
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	resp, err := gs.orchestratorClient.GetWorkerActivity(ctx, &orchestratorpb.WorkerActivityRequest{})
@@ -547,7 +640,7 @@ func (gs *GatewayServer) handleWorkerActivity(c *gin.Context) {
 
 func (gs *GatewayServer) handleGetWorkers(c *gin.Context) {
 	// Get worker activity from orchestrator via gRPC
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	resp, err := gs.orchestratorClient.GetWorkerActivity(ctx, &orchestratorpb.WorkerActivityRequest{})
@@ -587,8 +680,8 @@ func (gs *GatewayServer) handleCancelJob(c *gin.Context) {
 	jobID := c.Param("id")
 	
 	log.Printf("Cancel request received for job: %s", jobID)
-	
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	
 	// Call the orchestrator's CancelJob RPC
@@ -630,8 +723,59 @@ func (gs *GatewayServer) Run() error {
 		port = "8080"
 	}
 
-	log.Printf("API Gateway starting on port %s", port)
-	return gs.router.Run(":" + port)
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           gs.router,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	// Serve in the background so we can wait for shutdown signals
+	errCh := make(chan error, 1)
+	go func() {
+		log.Printf("API Gateway starting on port %s", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+
+	// Wait for SIGINT/SIGTERM (or a server error)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-errCh:
+		gs.closeClients()
+		return err
+	case sig := <-quit:
+		log.Printf("Received signal %s, shutting down gracefully...", sig)
+	}
+
+	// Gracefully drain in-flight requests with a 15s deadline
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	err := srv.Shutdown(shutdownCtx)
+	if err != nil {
+		log.Printf("Error during server shutdown: %v", err)
+	}
+
+	gs.closeClients()
+	log.Println("API Gateway stopped")
+	return err
+}
+
+// closeClients closes the gRPC connection and Redis client.
+func (gs *GatewayServer) closeClients() {
+	if gs.grpcConn != nil {
+		if err := gs.grpcConn.Close(); err != nil {
+			log.Printf("Error closing gRPC connection: %v", err)
+		}
+	}
+	if gs.redisClient != nil {
+		if err := gs.redisClient.Close(); err != nil {
+			log.Printf("Error closing Redis client: %v", err)
+		}
+	}
 }
 
 func main() {

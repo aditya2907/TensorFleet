@@ -9,14 +9,37 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"strconv"
 	"sync"
+	"syscall"
 	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	orchestratorpb "github.com/tensorfleet/orchestrator/proto/orchestrator"
 )
+
+// storageHTTPClient is shared by all autoSaveModel calls so we reuse
+// connections instead of creating a new http.Client per call.
+var storageHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
+const (
+	defaultLeaseTimeout = 5 * time.Minute
+	reaperInterval      = 30 * time.Second
+)
+
+// leaseInfo tracks a task that has been handed to a worker via AssignTask but
+// whose completion has not yet been reported.
+type leaseInfo struct {
+	Task       *Task
+	WorkerID   string
+	AssignedAt time.Time
+}
 
 type OrchestratorServer struct {
 	orchestratorpb.UnimplementedOrchestratorServiceServer
@@ -25,6 +48,19 @@ type OrchestratorServer struct {
 	taskQueue   chan *Task
 	workers     map[string]*WorkerActivity // Track worker activity
 	mu          sync.RWMutex
+
+	// assigned tracks leased tasks by task ID so the reaper can requeue tasks
+	// held by dead workers. completedTaskIDs records tasks whose completion has
+	// been reported, so a late duplicate report (e.g. after a lease-expiry
+	// requeue) never double-counts. Both are guarded by mu.
+	assigned         map[string]*leaseInfo
+	completedTaskIDs map[string]bool
+	leaseTimeout     time.Duration
+
+	// enqueueMu serializes all producers on taskQueue (CreateTrainingJob and
+	// the lease reaper). Consumers only ever remove items, so a capacity check
+	// performed while holding enqueueMu remains valid for subsequent sends.
+	enqueueMu sync.Mutex
 }
 
 type Job struct {
@@ -100,11 +136,15 @@ func (s *OrchestratorServer) autoSaveModel(ctx context.Context, jobID string, jo
 		return
 	}
 
-	// Call storage service to auto-save model
-	client := &http.Client{Timeout: 30 * time.Second}
 	url := fmt.Sprintf("%s/api/v1/jobs/%s/auto-save-model", storageURL, jobID)
-	
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Warning: Failed to build auto-save request for job %s: %v", jobID, err)
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := storageHTTPClient.Do(httpReq)
 	if err != nil {
 		log.Printf("Warning: Failed to auto-save model for job %s: %v", jobID, err)
 		return
@@ -139,12 +179,79 @@ func NewOrchestratorServer() (*OrchestratorServer, error) {
 		log.Println("Connected to Redis successfully")
 	}
 
+	leaseTimeout := defaultLeaseTimeout
+	if v := os.Getenv("TASK_LEASE_TIMEOUT_SECONDS"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			leaseTimeout = time.Duration(secs) * time.Second
+		}
+	}
+
 	return &OrchestratorServer{
-		redisClient: rdb,
-		jobs:        make(map[string]*Job),
-		taskQueue:   make(chan *Task, 1000),
-		workers:     make(map[string]*WorkerActivity),
+		redisClient:      rdb,
+		jobs:             make(map[string]*Job),
+		taskQueue:        make(chan *Task, 1000),
+		workers:          make(map[string]*WorkerActivity),
+		assigned:         make(map[string]*leaseInfo),
+		completedTaskIDs: make(map[string]bool),
+		leaseTimeout:     leaseTimeout,
 	}, nil
+}
+
+// startLeaseReaper periodically requeues tasks whose lease expired — e.g.
+// the assigned worker crashed and never reported completion. Without this,
+// a single lost task leaves its job incomplete forever.
+func (s *OrchestratorServer) startLeaseReaper(stop <-chan struct{}) {
+	go func() {
+		ticker := time.NewTicker(reaperInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				s.reapExpiredLeases()
+			}
+		}
+	}()
+}
+
+func (s *OrchestratorServer) reapExpiredLeases() {
+	now := time.Now()
+	var toRequeue []*Task
+
+	s.mu.Lock()
+	for taskID, lease := range s.assigned {
+		if now.Sub(lease.AssignedAt) < s.leaseTimeout {
+			continue
+		}
+		delete(s.assigned, taskID)
+		if s.completedTaskIDs[taskID] {
+			continue
+		}
+		job := s.jobs[lease.Task.JobID]
+		if job == nil || job.Status == "CANCELLED" || job.Status == "COMPLETED" || job.Status == "FAILED" {
+			continue
+		}
+		lease.Task.Status = "PENDING"
+		lease.Task.WorkerID = ""
+		toRequeue = append(toRequeue, lease.Task)
+	}
+	s.mu.Unlock()
+
+	if len(toRequeue) == 0 {
+		return
+	}
+
+	s.enqueueMu.Lock()
+	defer s.enqueueMu.Unlock()
+	for _, task := range toRequeue {
+		select {
+		case s.taskQueue <- task:
+			log.Printf("Requeued task %s (job %s) after lease expiry", task.TaskID, task.JobID)
+		default:
+			log.Printf("Warning: task queue full, dropping requeue of task %s (job %s)", task.TaskID, task.JobID)
+		}
+	}
 }
 
 func (s *OrchestratorServer) CreateTrainingJob(ctx context.Context, req *orchestratorpb.TrainingJobRequest) (*orchestratorpb.TrainingJobResponse, error) {
@@ -184,16 +291,27 @@ func (s *OrchestratorServer) CreateTrainingJob(ctx context.Context, req *orchest
 	job.TotalTasks = len(job.Tasks)
 	job.Status = "RUNNING"
 
+	// Backpressure: reserve queue capacity for the whole job up front, before
+	// registering it. If the queue can't hold all tasks the job is rejected
+	// with ResourceExhausted so the caller can retry later, instead of a
+	// detached goroutine silently blocking on a full channel.
+	s.enqueueMu.Lock()
+	if len(s.taskQueue)+len(job.Tasks) > cap(s.taskQueue) {
+		queued := len(s.taskQueue)
+		s.enqueueMu.Unlock()
+		return nil, status.Errorf(codes.ResourceExhausted,
+			"task queue saturated (%d/%d queued, job needs %d): retry later",
+			queued, cap(s.taskQueue), len(job.Tasks))
+	}
+
 	s.mu.Lock()
 	s.jobs[req.JobId] = job
 	s.mu.Unlock()
 
-	// Enqueue tasks asynchronously to avoid blocking job creation
-	go func() {
-		for _, task := range job.Tasks {
-			s.taskQueue <- task
-		}
-	}()
+	for _, task := range job.Tasks {
+		s.taskQueue <- task
+	}
+	s.enqueueMu.Unlock()
 
 	// Persist to Redis
 	if err := s.saveJobToRedis(ctx, job); err != nil {
@@ -245,51 +363,69 @@ func (s *OrchestratorServer) GetJobStatus(ctx context.Context, req *orchestrator
 }
 
 func (s *OrchestratorServer) AssignTask(ctx context.Context, req *orchestratorpb.AssignTaskRequest) (*orchestratorpb.AssignTaskResponse, error) {
-	select {
-	case task := <-s.taskQueue:
-		s.mu.RLock()
-		job := s.jobs[task.JobID]
-		s.mu.RUnlock()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case task := <-s.taskQueue:
+			s.mu.RLock()
+			job := s.jobs[task.JobID]
+			s.mu.RUnlock()
 
-		if job == nil {
-			return nil, fmt.Errorf("job not found for task")
-		}
-
-		task.WorkerID = req.WorkerId
-		task.Status = "ASSIGNED"
-
-		// Update worker activity
-		s.mu.Lock()
-		workerActivity, ok := s.workers[req.WorkerId]
-		if !ok {
-			workerActivity = &WorkerActivity{
-				WorkerID:      req.WorkerId,
-				Status:        "BUSY",
-				TasksCompleted: 0,
-				LastActivityTime: time.Now(),
+			// Drain tasks that no longer have work to do: orphaned jobs and
+			// jobs cancelled after their tasks were queued.
+			if job == nil {
+				log.Printf("Dropping task %s: job %s not found", task.TaskID, task.JobID)
+				continue
 			}
-			s.workers[req.WorkerId] = workerActivity
+			if job.Status == "CANCELLED" || job.Status == "FAILED" {
+				log.Printf("Dropping task %s: job %s is %s", task.TaskID, task.JobID, job.Status)
+				continue
+			}
+
+			task.WorkerID = req.WorkerId
+			task.Status = "ASSIGNED"
+
+			// Update worker activity and record the lease so a dead worker's
+			// task gets requeued by the reaper.
+			s.mu.Lock()
+			workerActivity, ok := s.workers[req.WorkerId]
+			if !ok {
+				workerActivity = &WorkerActivity{
+					WorkerID:         req.WorkerId,
+					Status:           "BUSY",
+					TasksCompleted:   0,
+					LastActivityTime: time.Now(),
+				}
+				s.workers[req.WorkerId] = workerActivity
+			}
+			workerActivity.CurrentTaskID = task.TaskID
+			workerActivity.CurrentJobID = task.JobID
+			workerActivity.Status = "BUSY"
+			workerActivity.LastActivityTime = time.Now()
+			s.assigned[task.TaskID] = &leaseInfo{
+				Task:       task,
+				WorkerID:   req.WorkerId,
+				AssignedAt: time.Now(),
+			}
+			s.mu.Unlock()
+
+			log.Printf("Assigned task %s (epoch %d) to worker %s", task.TaskID, task.Epoch, req.WorkerId)
+
+			return &orchestratorpb.AssignTaskResponse{
+				TaskId:          task.TaskID,
+				JobId:           task.JobID,
+				ModelType:       job.ModelType,
+				DatasetPath:     job.DatasetPath,
+				Hyperparameters: job.Hyperparameters,
+				Epoch:           task.Epoch,
+				BatchStart:      task.BatchStart,
+				BatchEnd:        task.BatchEnd,
+			}, nil
+		case <-deadline:
+			return nil, fmt.Errorf("no tasks available")
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
-		workerActivity.CurrentTaskID = task.TaskID
-		workerActivity.CurrentJobID = task.JobID
-		workerActivity.Status = "BUSY"
-		workerActivity.LastActivityTime = time.Now()
-		s.mu.Unlock()
-
-		log.Printf("Assigned task %s (epoch %d) to worker %s", task.TaskID, task.Epoch, req.WorkerId)
-
-		return &orchestratorpb.AssignTaskResponse{
-			TaskId:          task.TaskID,
-			JobId:           task.JobID,
-			ModelType:       job.ModelType,
-			DatasetPath:     job.DatasetPath,
-			Hyperparameters: job.Hyperparameters,
-			Epoch:           task.Epoch,
-			BatchStart:      task.BatchStart,
-			BatchEnd:        task.BatchEnd,
-		}, nil
-	case <-time.After(5 * time.Second):
-		return nil, fmt.Errorf("no tasks available")
 	}
 }
 
@@ -305,7 +441,18 @@ func (s *OrchestratorServer) ReportTaskCompletion(ctx context.Context, req *orch
 		return nil, fmt.Errorf("job not found")
 	}
 
+	// Release the lease and ignore duplicate reports (a slow worker may report
+	// after the reaper already requeued and another worker completed the task).
+	delete(s.assigned, req.TaskId)
+	if s.completedTaskIDs[req.TaskId] {
+		return &orchestratorpb.TaskCompletionResponse{
+			Acknowledged: true,
+			Message:      "Duplicate task completion ignored",
+		}, nil
+	}
+
 	if req.Success {
+		s.completedTaskIDs[req.TaskId] = true
 		job.CompletedTasks++
 		job.CurrentLoss = req.Loss
 		job.CurrentAccuracy = req.Accuracy
@@ -314,9 +461,36 @@ func (s *OrchestratorServer) ReportTaskCompletion(ctx context.Context, req *orch
 		if job.CompletedTasks >= job.TotalTasks {
 			job.Status = "COMPLETED"
 			log.Printf("Job %s completed!", req.JobId)
-			
-			// Trigger automatic model saving in background
-			go s.autoSaveModel(ctx, req.JobId, job)
+
+			// Trigger automatic model saving in background. Use a fresh
+			// context: the request ctx dies when this RPC returns.
+			saveCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			go func() {
+				defer cancel()
+				s.autoSaveModel(saveCtx, req.JobId, job)
+			}()
+		}
+	} else if job.Status == "RUNNING" {
+		// Failed attempt: requeue the task for another worker to retry.
+		s.mu.Unlock()
+		s.enqueueMu.Lock()
+		requeued := false
+		select {
+		case s.taskQueue <- &Task{
+			TaskID:    req.TaskId,
+			JobID:     req.JobId,
+			Status:    "PENDING",
+			CreatedAt: time.Now(),
+		}:
+			requeued = true
+		default:
+		}
+		s.enqueueMu.Unlock()
+		s.mu.Lock()
+		if requeued {
+			log.Printf("Task %s failed on worker %s, requeued for retry", req.TaskId, req.WorkerId)
+		} else {
+			log.Printf("Warning: task %s failed and queue is full, not requeued", req.TaskId)
 		}
 	}
 
@@ -466,8 +640,37 @@ func main() {
 	grpcServer := grpc.NewServer()
 	orchestratorpb.RegisterOrchestratorServiceServer(grpcServer, server)
 
-	log.Printf("Orchestrator server listening on port %s", port)
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+	reaperStop := make(chan struct{})
+	server.startLeaseReaper(reaperStop)
+
+	go func() {
+		log.Printf("Orchestrator server listening on port %s", port)
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("Failed to serve: %v", err)
+		}
+	}()
+
+	// Graceful shutdown: let in-flight RPCs finish, force-stop after 15s.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-sigCh
+	log.Printf("Received %s, shutting down gracefully...", sig)
+
+	close(reaperStop)
+	done := make(chan struct{})
+	go func() {
+		grpcServer.GracefulStop()
+		close(done)
+	}()
+	select {
+	case <-done:
+		log.Println("gRPC server stopped gracefully")
+	case <-time.After(15 * time.Second):
+		log.Println("Graceful stop timed out, forcing shutdown")
+		grpcServer.Stop()
+	}
+
+	if err := server.redisClient.Close(); err != nil {
+		log.Printf("Error closing Redis client: %v", err)
 	}
 }

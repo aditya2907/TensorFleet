@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, Response, stream_with_context
 from flask_cors import CORS
 from minio import Minio
 from minio.error import S3Error
@@ -52,7 +52,6 @@ def ensure_buckets():
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint with MinIO and MongoDB connectivity tests"""
-    logger.info("=== HEALTH CHECK ENDPOINT CALLED ===")
     try:
         # Test MinIO connectivity
         try:
@@ -138,19 +137,36 @@ def download_file(bucket, object_name):
         return jsonify({'error': f'Invalid bucket: {bucket}'}), 400
 
     try:
-        response = minio_client.get_object(bucket, object_name)
-        
-        # Read data
-        data = response.read()
-        response.close()
-        response.release_conn()
+        # Stat first so we can set Content-Length without buffering the object
+        try:
+            stat = minio_client.stat_object(bucket, object_name)
+        except S3Error:
+            stat = None
 
-        logger.info(f"Downloaded {object_name} from bucket {bucket}")
-        
-        return send_file(
-            BytesIO(data),
-            as_attachment=True,
-            download_name=object_name.split('/')[-1]
+        response = minio_client.get_object(bucket, object_name)
+
+        def generate():
+            try:
+                for chunk in response.stream(64 * 1024):
+                    yield chunk
+            finally:
+                response.close()
+                response.release_conn()
+
+        logger.info(f"Streaming download of {object_name} from bucket {bucket}")
+
+        filename = object_name.split('/')[-1]
+        headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
+        if stat is not None and stat.size is not None:
+            headers['Content-Length'] = str(stat.size)
+
+        content_type = (stat.content_type if stat and stat.content_type
+                        else 'application/octet-stream')
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype=content_type,
+            headers=headers
         )
 
     except S3Error as e:
@@ -258,8 +274,9 @@ def list_models_endpoint():
     try:
         job_id = request.args.get('job_id')
         limit = int(request.args.get('limit', 50))
-        
-        models = storage_manager.list_models(job_id=job_id, limit=limit)
+        offset = int(request.args.get('offset', 0))
+
+        models = storage_manager.list_models(job_id=job_id, limit=limit, offset=offset)
         
         return jsonify({
             'models': models,
@@ -272,17 +289,30 @@ def list_models_endpoint():
 
 @app.route('/api/v1/models/<model_id>', methods=['GET'])
 def get_model(model_id):
-    """Download a specific model"""
+    """Download a specific model (streamed, not buffered in memory)"""
     try:
-        model_data, metadata = storage_manager.load_model(mongo_id=model_id)
-        
-        return send_file(
-            BytesIO(model_data),
-            as_attachment=True,
-            download_name=f"model_{model_id}.pkl",
-            mimetype='application/octet-stream'
+        minio_response, stat, metadata = storage_manager.open_model_stream(mongo_id=model_id)
+
+        def generate():
+            try:
+                for chunk in minio_response.stream(64 * 1024):
+                    yield chunk
+            finally:
+                minio_response.close()
+                minio_response.release_conn()
+
+        headers = {
+            'Content-Disposition': f'attachment; filename="model_{model_id}.pkl"'
+        }
+        if stat is not None and stat.size is not None:
+            headers['Content-Length'] = str(stat.size)
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype='application/octet-stream',
+            headers=headers
         )
-    
+
     except Exception as e:
         logger.error(f"Error downloading model: {e}")
         return jsonify({'error': str(e)}), 404
@@ -455,37 +485,13 @@ def update_job_endpoint(job_id):
         logger.error(f"Error updating job: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/debug-test', methods=['GET'])
-def test_debug():
-    """Debug test endpoint"""
-    logger.info("=== DEBUG TEST ENDPOINT HIT ===")
-    return jsonify({'message': 'Debug endpoint working', 'timestamp': datetime.now().isoformat()})
-
-@app.route('/debug-routes', methods=['GET'])
-def debug_routes():
-    """List all registered routes"""
-    logger.info("=== DEBUG ROUTES ENDPOINT HIT ===")
-    routes = []
-    for rule in app.url_map.iter_rules():
-        routes.append({
-            'endpoint': rule.endpoint,
-            'methods': list(rule.methods),
-            'rule': str(rule)
-        })
-    return jsonify({'routes': routes})
-
 @app.route('/api/v1/jobs/<job_id>/auto-save-model', methods=['POST'])
 def auto_save_model_endpoint(job_id):
     """Automatically save model when job completes"""
-    logger.info(f"=== AUTO-SAVE ENDPOINT CALLED FOR JOB: {job_id} ===")
     try:
-        logger.info(f"Request method: {request.method}")
-        logger.info(f"Request path: {request.path}")
-        logger.info(f"Request headers: {dict(request.headers)}")
-        
         # Get job information from request body (sent by orchestrator)
         job_data = request.get_json()
-        logger.info(f"Auto-save endpoint called for job {job_id}, received data: {job_data}")
+        logger.info(f"Auto-save endpoint called for job {job_id}")
         if not job_data:
             logger.error(f"No job data received for job {job_id}")
             return jsonify({'error': 'Job data is required'}), 400
@@ -577,8 +583,9 @@ def list_jobs_endpoint():
         user_id = request.args.get('user_id')
         status = request.args.get('status')
         limit = int(request.args.get('limit', 50))
-        
-        jobs = storage_manager.list_jobs(user_id=user_id, status=status, limit=limit)
+        offset = int(request.args.get('offset', 0))
+
+        jobs = storage_manager.list_jobs(user_id=user_id, status=status, limit=limit, offset=offset)
         
         return jsonify({
             'jobs': jobs,

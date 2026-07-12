@@ -12,4 +12,5 @@ COPY . .
 
 EXPOSE 8081
 
-CMD ["python", "main.py"]
+# Production WSGI server (long --timeout for large model up/downloads)
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8081", "--timeout", "300", "main:app"]

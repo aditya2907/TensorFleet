@@ -30,7 +30,12 @@ class MongoDBManager:
     def connect(self):
         """Establish MongoDB connection"""
         try:
-            self.client = MongoClient(self.mongo_url)
+            self.client = MongoClient(
+                self.mongo_url,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=5000,
+                socketTimeoutMS=30000
+            )
             self.db = self.client[self.db_name]
             self.fs = GridFS(self.db)
             # Test connection

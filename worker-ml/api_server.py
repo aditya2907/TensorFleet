@@ -7,6 +7,8 @@ Provides HTTP API endpoints for training jobs
 import os
 import json
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Dict, Any
 from flask import Flask, request, jsonify, Response
@@ -31,6 +33,41 @@ try:
 except Exception as e:
     logger.error(f"Failed to initialize ML Worker Service: {e}")
     ml_service = None
+
+# Async training infrastructure: jobs run on a small thread pool so POST /train
+# returns immediately instead of blocking the request thread through training.
+# NOTE: state is in-memory - run with a single (multi-threaded) server process.
+training_executor = ThreadPoolExecutor(max_workers=2)
+training_jobs: Dict[str, Dict[str, Any]] = {}
+training_jobs_lock = threading.Lock()
+
+def _run_training_job(job_id: str, job_data: Dict[str, Any]):
+    """Execute a training job on the executor and record its outcome."""
+    with training_jobs_lock:
+        entry = training_jobs.get(job_id)
+        if entry is not None:
+            entry['status'] = 'RUNNING'
+            entry['started_at'] = datetime.utcnow().isoformat()
+    try:
+        result = ml_service.process_training_job(job_data)
+        with training_jobs_lock:
+            entry = training_jobs.get(job_id)
+            if entry is not None:
+                entry['result'] = result
+                if result.get('status') == 'completed':
+                    entry['status'] = 'COMPLETED'
+                else:
+                    entry['status'] = 'FAILED'
+                    entry['error'] = result.get('error')
+                entry['completed_at'] = datetime.utcnow().isoformat()
+    except Exception as e:
+        logger.error(f"Training job {job_id} raised an exception: {e}")
+        with training_jobs_lock:
+            entry = training_jobs.get(job_id)
+            if entry is not None:
+                entry['status'] = 'FAILED'
+                entry['error'] = str(e)
+                entry['completed_at'] = datetime.utcnow().isoformat()
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -75,18 +112,48 @@ def submit_training_job():
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
         logger.info(f"Received training job: {job_data['job_id']}")
-        
-        # Process the training job
-        result = ml_service.process_training_job(job_data)
-        
-        if result['status'] == 'completed':
-            return jsonify(result), 200
-        else:
-            return jsonify(result), 500
-        
+
+        # ?sync=true preserves the old blocking behavior
+        if request.args.get('sync', 'false').lower() == 'true':
+            result = ml_service.process_training_job(job_data)
+            if result['status'] == 'completed':
+                return jsonify(result), 200
+            else:
+                return jsonify(result), 500
+
+        # Async (default): queue the job and return immediately
+        job_id = str(job_data['job_id'])
+        with training_jobs_lock:
+            existing = training_jobs.get(job_id)
+            if existing and existing['status'] in ('QUEUED', 'RUNNING'):
+                return jsonify({
+                    'job_id': job_id,
+                    'status': existing['status'],
+                    'message': 'Job is already queued or running'
+                }), 409
+            training_jobs[job_id] = {
+                'job_id': job_id,
+                'status': 'QUEUED',
+                'result': None,
+                'error': None,
+                'submitted_at': datetime.utcnow().isoformat()
+            }
+        training_executor.submit(_run_training_job, job_id, job_data)
+
+        return jsonify({'job_id': job_id, 'status': 'QUEUED'}), 202
+
     except Exception as e:
         logger.error(f"Error processing training job: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/train/<job_id>', methods=['GET'])
+def get_training_job_status(job_id):
+    """Get status/result of an async training job"""
+    with training_jobs_lock:
+        entry = training_jobs.get(job_id)
+        if entry is None:
+            return jsonify({'error': 'Training job not found', 'job_id': job_id}), 404
+        return jsonify(dict(entry)), 200
 
 @app.route('/datasets', methods=['GET'])
 def list_datasets():
@@ -116,7 +183,12 @@ def list_algorithms():
         {"name": "svm", "type": "scikit-learn", "description": "Support Vector Machine for classification tasks."},
         {"name": "decision_tree", "type": "scikit-learn", "description": "Decision Tree Classifier for interpretable models."},
         {"name": "dnn", "type": "tensorflow", "description": "Deep Neural Network for complex classification tasks."},
-        {"name": "cnn", "type": "tensorflow", "description": "Convolutional Neural Network for image-based tasks."}
+        {"name": "cnn", "type": "tensorflow", "description": "Convolutional Neural Network for image-based tasks."},
+        {"name": "pytorch_logistic", "type": "pytorch", "description": "Logistic regression trained with PyTorch (single linear layer)."},
+        {"name": "pytorch_mlp", "type": "pytorch", "description": "Multi-layer perceptron with configurable hidden layers and dropout."},
+        {"name": "pytorch_cnn", "type": "pytorch", "description": "2D convolutional network (requires a perfect-square feature count)."},
+        {"name": "pytorch_lstm", "type": "pytorch", "description": "LSTM recurrent network over the feature sequence."},
+        {"name": "pytorch_transformer", "type": "pytorch", "description": "Transformer encoder treating each feature as a token."}
     ]
     return jsonify({"algorithms": algorithms})
 

@@ -16,12 +16,14 @@ import {
   Grid,
   Paper,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   Download as DownloadIcon,
   Save as SaveIcon,
   CloudUpload as CloudUploadIcon,
+  Autorenew as AutorenewIcon,
 } from '@mui/icons-material';
 import { storageAPI } from '../api/api';
 
@@ -273,11 +275,12 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
   return (
     <Card>
       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            🔄 Training Progress
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <AutorenewIcon fontSize="small" color="primary" />
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Training Progress
           </Typography>
-          <IconButton onClick={() => setExpanded(!expanded)}>
+          <IconButton size="small" onClick={() => setExpanded(!expanded)}>
             {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
           </IconButton>
         </Box>
@@ -293,19 +296,7 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
                 {progress.toFixed(1)}%
               </Typography>
             </Box>
-            <LinearProgress 
-              variant="determinate" 
-              value={progress} 
-              sx={{ 
-                height: 12, 
-                borderRadius: 6,
-                background: 'rgba(102, 126, 234, 0.1)',
-                '& .MuiLinearProgress-bar': {
-                  background: 'linear-gradient(90deg, #667eea, #764ba2)',
-                  borderRadius: 6,
-                }
-              }}
-            />
+            <LinearProgress variant="determinate" value={progress} color="primary" />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
               <Typography variant="caption" color="textSecondary">
                 Epoch {currentEpoch} of {totalEpochs}
@@ -318,9 +309,15 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
 
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 2, bgcolor: 'primary.lighter' }}>
+              <Paper
+                variant="outlined"
+                sx={(theme) => ({
+                  p: 2,
+                  backgroundColor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.12 : 0.06),
+                })}
+              >
                 <Typography variant="subtitle2" gutterBottom>
-                  📊 Current Metrics
+                  Current Metrics
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 3 }}>
                   <Box>
@@ -340,9 +337,15 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
             </Grid>
 
             <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 2, bgcolor: 'success.lighter' }}>
+              <Paper
+                variant="outlined"
+                sx={(theme) => ({
+                  p: 2,
+                  backgroundColor: alpha(theme.palette.success.main, theme.palette.mode === 'dark' ? 0.12 : 0.06),
+                })}
+              >
                 <Typography variant="subtitle2" gutterBottom>
-                  💾 Artifacts Generated
+                  Artifacts Generated
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Chip size="small" label={`${checkpoints.length} Checkpoints`} color="success" />
@@ -365,11 +368,11 @@ const TrainingProgressMonitor = ({ job, onNotification }) => {
           {checkpoints.length > 0 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle2" gutterBottom>
-                📋 Recent Checkpoints
+                Recent Checkpoints
               </Typography>
               <List dense>
                 {checkpoints.slice(-3).map((checkpoint, idx) => (
-                  <ListItem key={idx} sx={{ bgcolor: 'grey.50', borderRadius: 1, mb: 0.5 }}>
+                  <ListItem key={idx} sx={{ bgcolor: 'action.hover', borderRadius: 1, mb: 0.5 }}>
                     <ListItemText
                       primary={`Epoch ${checkpoint.epoch}`}
                       secondary={`Loss: ${checkpoint.metrics?.loss?.toFixed(4)}, Accuracy: ${checkpoint.metrics?.accuracy?.toFixed(4)}`}

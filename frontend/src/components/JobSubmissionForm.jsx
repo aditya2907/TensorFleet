@@ -6,18 +6,22 @@ import {
   TextField,
   Button,
   Box,
+  Grid,
   MenuItem,
   CircularProgress,
-  Divider,
   FormControlLabel,
   Checkbox,
   Alert,
   Chip,
+  Stack,
 } from '@mui/material';
-import SendIcon from '@mui/icons-material/Send';
-import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import SendRoundedIcon from '@mui/icons-material/SendRounded';
+import AutoFixHighRoundedIcon from '@mui/icons-material/AutoFixHighRounded';
+import WorkOutlineRoundedIcon from '@mui/icons-material/WorkOutlineRounded';
+import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import MLJobValidationDialog from './MLJobValidationDialog';
-import { MLTrainingPresets, getPresetRecommendations, applyPreset } from '../utils/mlPresets';
+import { MLTrainingPresets, applyPreset } from '../utils/mlPresets';
 
 const modelTypes = [
   { value: 'resnet50', label: 'ResNet-50', category: 'Computer Vision' },
@@ -33,6 +37,11 @@ const modelTypes = [
   { value: 'svm', label: 'SVM', category: 'Traditional ML' },
   { value: 'decision_tree', label: 'Decision Tree', category: 'Traditional ML' },
   { value: 'dnn', label: 'Deep Neural Network', category: 'Traditional ML' },
+  { value: 'pytorch_mlp', label: 'MLP (PyTorch)', category: 'PyTorch' },
+  { value: 'pytorch_cnn', label: 'CNN (PyTorch)', category: 'PyTorch' },
+  { value: 'pytorch_lstm', label: 'LSTM (PyTorch)', category: 'PyTorch' },
+  { value: 'pytorch_transformer', label: 'Transformer (PyTorch)', category: 'PyTorch' },
+  { value: 'pytorch_logistic', label: 'Logistic Regression (PyTorch)', category: 'PyTorch' },
 ];
 
 const optimizerOptions = [
@@ -49,6 +58,13 @@ const lossOptions = [
   { value: 'mean_squared_error', label: 'Mean Squared Error' },
   { value: 'mean_absolute_error', label: 'Mean Absolute Error' },
 ];
+
+const SectionHeader = ({ icon: Icon, title }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+    <Icon fontSize="small" color="primary" />
+    <Typography variant="h6">{title}</Typography>
+  </Box>
+);
 
 const JobSubmissionForm = ({ onSubmit, loading, datasets, onNotification }) => {
   const [formData, setFormData] = useState({
@@ -118,7 +134,7 @@ const JobSubmissionForm = ({ onSubmit, loading, datasets, onNotification }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     const validationError = validateForm();
     if (validationError) {
       if (onNotification) {
@@ -132,7 +148,7 @@ const JobSubmissionForm = ({ onSubmit, loading, datasets, onNotification }) => {
       }
       return;
     }
-    
+
     // Format data according to API Gateway requirements
     const jobData = {
       job_name: formData.job_name,
@@ -175,76 +191,25 @@ const JobSubmissionForm = ({ onSubmit, loading, datasets, onNotification }) => {
   };
 
   return (
-    <Card sx={{ 
-      background: 'linear-gradient(145deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.85) 100%)',
-      backdropFilter: 'blur(20px)',
-      border: '1px solid rgba(255,255,255,0.2)',
-      borderRadius: '20px',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-      overflow: 'visible',
-      position: 'relative',
-    }}>
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 2, 
-          mb: 4,
-          pb: 2,
-          borderBottom: '2px solid',
-          borderImage: 'linear-gradient(90deg, #667eea, #764ba2) 1'
-        }}>
-          <Box sx={{
-            background: 'linear-gradient(135deg, #667eea, #764ba2)',
-            borderRadius: '12px',
-            p: 1.5,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 15px rgba(102, 126, 234, 0.4)',
-          }}>
-            <SendIcon sx={{ color: 'white', fontSize: 22 }} />
-          </Box>
-          <Typography 
-            variant="h5" 
-            sx={{ 
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #667eea, #764ba2)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}
-          >
-            Submit Training Job
-          </Typography>
+    <Card>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
+          <SendRoundedIcon fontSize="small" color="primary" />
+          <Typography variant="h6">Submit Training Job</Typography>
         </Box>
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
           {/* Quick Configuration Presets */}
-          <Box sx={{ 
-            mb: 3,
-            p: 2,
-            background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05))',
-            borderRadius: '12px',
-            border: '1px solid rgba(102, 126, 234, 0.1)'
-          }}>
+          <Box sx={{ mb: 3 }}>
             <Button
-              startIcon={<AutoFixHighIcon />}
+              startIcon={<AutoFixHighRoundedIcon />}
               onClick={() => setShowPresets(!showPresets)}
               variant="outlined"
               size="medium"
-              sx={{ 
-                mb: showPresets ? 2 : 0,
-                borderColor: 'primary.main',
-                '&:hover': {
-                  borderColor: 'primary.dark',
-                  background: 'rgba(102, 126, 234, 0.1)'
-                }
-              }}
             >
               Quick Config Presets
             </Button>
-            
+
             {showPresets && (
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2 }}>
                 {Object.entries(MLTrainingPresets).map(([key, preset]) => (
@@ -253,17 +218,7 @@ const JobSubmissionForm = ({ onSubmit, loading, datasets, onNotification }) => {
                     label={preset.name}
                     onClick={() => handleApplyPreset(key)}
                     variant="outlined"
-                    size="medium"
-                    sx={{ 
-                      cursor: 'pointer',
-                      '&:hover': {
-                        background: 'primary.main',
-                        color: 'white',
-                        transform: 'translateY(-1px)',
-                        boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
-                      },
-                      transition: 'all 0.2s ease'
-                    }}
+                    size="small"
                     title={preset.description}
                   />
                 ))}
@@ -271,415 +226,196 @@ const JobSubmissionForm = ({ onSubmit, loading, datasets, onNotification }) => {
             )}
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 3, mb: 2 }}>
-            <TextField
-              fullWidth
-              label="Job Name"
-              value={formData.job_name}
-              onChange={handleChange('job_name')}
-              margin="normal"
-              variant="outlined"
-              required
-              error={!formData.job_name || formData.job_name.trim() === ''}
-              helperText={(!formData.job_name || formData.job_name.trim() === '') ? "Job name is required" : "This will be used in the model name"}
-              placeholder="Enter a descriptive name for your training job"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&:hover fieldset': {
-                    borderColor: 'primary.main',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'primary.main',
-                    borderWidth: 2,
-                  }
-                }
-              }}
-            />
-            
-            <TextField
-              fullWidth
-              label="Description"
-              value={formData.description}
-              onChange={handleChange('description')}
-              margin="normal"
-              variant="outlined"
-              placeholder="Brief description (optional)"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&:hover fieldset': {
-                    borderColor: 'primary.main',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'primary.main',
-                    borderWidth: 2,
-                  }
-                }
-              }}
-            />
-          </Box>
-
-          <TextField
-            select
-            fullWidth
-            label="Model Type"
-            value={formData.model_type}
-            onChange={handleChange('model_type')}
-            margin="normal"
-            variant="outlined"
-            helperText="Select the machine learning model architecture"
-            sx={{
-              mb: 2,
-              '& .MuiOutlinedInput-root': {
-                '&:hover fieldset': {
-                  borderColor: 'primary.main',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: 'primary.main',
-                  borderWidth: 2,
-                }
-              }
-            }}
-          >
-            {modelTypes.map((option) => (
-              <MenuItem 
-                key={option.value} 
-                value={option.value}
-                sx={{
-                  py: 1,
-                  '&:hover': {
-                    background: 'rgba(102, 126, 234, 0.1)'
-                  }
-                }}
-              >
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                    {option.label}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {option.category}
-                  </Typography>
-                </Box>
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select
-            fullWidth
-            label="Dataset"
-            value={formData.dataset_path}
-            onChange={handleChange('dataset_path')}
-            margin="normal"
-            variant="outlined"
-            helperText={(datasets && datasets.length === 0) ? "⚠️ Please upload a dataset first in the Datasets tab" : "Select a dataset from the manager"}
-            disabled={!datasets || datasets.length === 0}
-            required
-            error={!datasets || datasets.length === 0}
-            sx={{
-              mb: 3,
-              '& .MuiOutlinedInput-root': {
-                '&:hover fieldset': {
-                  borderColor: !datasets || datasets.length === 0 ? 'error.main' : 'primary.main',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: !datasets || datasets.length === 0 ? 'error.main' : 'primary.main',
-                  borderWidth: 2,
-                }
-              }
-            }}
-          >
-            {datasets && Array.isArray(datasets) ? datasets.map((option) => (
-              <MenuItem 
-                key={option?.name || 'unknown'} 
-                value={`datasets/${option?.name || 'unknown'}`}
-                sx={{
-                  '&:hover': {
-                    background: 'rgba(102, 126, 234, 0.1)'
-                  }
-                }}
-              >
-                {option?.name || 'Unknown Dataset'}
-              </MenuItem>
-            )) : null}
-          </TextField>
-
-          <Box sx={{ display: 'flex', gap: 3, mb: 3 }}>
-            <TextField
-              fullWidth
-              label="Workers"
-              type="number"
-              value={formData.num_workers}
-              onChange={handleChange('num_workers')}
-              margin="normal"
-              variant="outlined"
-              inputProps={{ min: 1, max: 10 }}
-              helperText="Number of parallel workers"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&:hover fieldset': {
-                    borderColor: 'primary.main',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'primary.main',
-                    borderWidth: 2,
-                  }
-                }
-              }}
-            />
-
-            <TextField
-              fullWidth
-              label="Epochs"
-              type="number"
-              value={formData.epochs}
-              onChange={handleChange('epochs')}
-              margin="normal"
-              variant="outlined"
-              inputProps={{ min: 1, max: 100 }}
-              helperText="Training iterations"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&:hover fieldset': {
-                    borderColor: 'primary.main',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'primary.main',
-                    borderWidth: 2,
-                  }
-                }
-              }}
-            />
-          </Box>
-
-          <Typography variant="h6" sx={{ 
-            mt: 4, 
-            mb: 2, 
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            color: 'primary.main'
-          }}>
-            📊 Hyperparameters
-          </Typography>
-          
-          <Box sx={{ 
-            display: 'flex', 
-            gap: 3, 
-            mb: 2,
-            p: 2,
-            background: 'rgba(102, 126, 234, 0.02)',
-            borderRadius: '12px',
-            border: '1px solid rgba(102, 126, 234, 0.1)'
-          }}>
-            <TextField
-              fullWidth
-              label="Learning Rate"
-              type="number"
-              value={formData.learning_rate}
-              onChange={handleChange('learning_rate')}
-              margin="normal"
-              variant="outlined"
-              placeholder="0.001"
-              inputProps={{ step: 0.0001, min: 0.0001, max: 1 }}
-              helperText="Learning rate for optimization"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&:hover fieldset': {
-                    borderColor: 'primary.main',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'primary.main',
-                    borderWidth: 2,
-                  }
-                }
-              }}
-            />
-
-            <TextField
-              fullWidth
-              label="Batch Size"
-              type="number"
-              value={formData.batch_size}
-              onChange={handleChange('batch_size')}
-              margin="normal"
-              variant="outlined"
-              placeholder="32"
-              inputProps={{ min: 1, max: 512 }}
-              helperText="Number of samples per batch"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&:hover fieldset': {
-                    borderColor: 'primary.main',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'primary.main',
-                    borderWidth: 2,
-                  }
-                }
-              }}
-            />
-          </Box>
-
-          <Box sx={{ display: 'flex', gap: 3, mb: 2 }}>
-            <TextField
-              select
-              fullWidth
-              label="Optimizer"
-              value={formData.optimizer}
-              onChange={handleChange('optimizer')}
-              margin="normal"
-              variant="outlined"
-              helperText="Optimization algorithm"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&:hover fieldset': {
-                    borderColor: 'primary.main',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'primary.main',
-                    borderWidth: 2,
-                  }
-                }
-              }}
-            >
-              {optimizerOptions.map((option) => (
-                <MenuItem 
-                  key={option.value} 
-                  value={option.value}
-                  sx={{
-                    '&:hover': {
-                      background: 'rgba(102, 126, 234, 0.1)'
-                    }
-                  }}
-                >
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
-
-            <TextField
-              select
-              fullWidth
-              label="Loss Function"
-              value={formData.loss_function}
-              onChange={handleChange('loss_function')}
-              margin="normal"
-              variant="outlined"
-              helperText="Loss function for training"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&:hover fieldset': {
-                    borderColor: 'primary.main',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'primary.main',
-                    borderWidth: 2,
-                  }
-                }
-              }}
-            >
-              {lossOptions.map((option) => (
-                <MenuItem 
-                  key={option.value} 
-                  value={option.value}
-                  sx={{
-                    '&:hover': {
-                      background: 'rgba(102, 126, 234, 0.1)'
-                    }
-                  }}
-                >
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Box>
-
-          <TextField
-            fullWidth
-            label="Validation Split"
-            type="number"
-            value={formData.validation_split}
-            onChange={handleChange('validation_split')}
-            margin="normal"
-            variant="outlined"
-            placeholder="0.2"
-            inputProps={{ step: 0.1, min: 0, max: 0.9 }}
-            helperText="Fraction of data to use for validation (0.0-0.9)"
-            sx={{
-              mb: 3,
-              '& .MuiOutlinedInput-root': {
-                '&:hover fieldset': {
-                  borderColor: 'primary.main',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: 'primary.main',
-                  borderWidth: 2,
-                }
-              }
-            }}
-          />
-
-          <Typography variant="h6" sx={{ 
-            mt: 4, 
-            mb: 2, 
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            color: 'primary.main'
-          }}>
-            ⚙️ Training Configuration
-          </Typography>
-
-          <Box sx={{ 
-            display: 'flex', 
-            gap: 3, 
-            alignItems: 'center', 
-            mb: 3,
-            p: 2,
-            background: 'rgba(102, 126, 234, 0.02)',
-            borderRadius: '12px',
-            border: '1px solid rgba(102, 126, 234, 0.1)'
-          }}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={formData.early_stopping}
-                  onChange={(e) => setFormData({ ...formData, early_stopping: e.target.checked })}
-                  sx={{
-                    '&.Mui-checked': {
-                      color: 'primary.main'
-                    }
-                  }}
+          {/* Job details */}
+          <Box sx={{ mb: 4 }}>
+            <SectionHeader icon={WorkOutlineRoundedIcon} title="Job Details" />
+            <Grid container spacing={2.5}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Job Name"
+                  value={formData.job_name}
+                  onChange={handleChange('job_name')}
+                  required
+                  error={!formData.job_name || formData.job_name.trim() === ''}
+                  helperText={(!formData.job_name || formData.job_name.trim() === '') ? 'Job name is required' : 'This will be used in the model name'}
+                  placeholder="Enter a descriptive name for your training job"
                 />
-              }
-              label="Enable Early Stopping"
-              sx={{ 
-                '& .MuiFormControlLabel-label': {
-                  fontWeight: 500
-                }
-              }}
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={formData.save_checkpoints}
-                  onChange={(e) => setFormData({ ...formData, save_checkpoints: e.target.checked })}
-                  sx={{
-                    '&.Mui-checked': {
-                      color: 'primary.main'
-                    }
-                  }}
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Description"
+                  value={formData.description}
+                  onChange={handleChange('description')}
+                  placeholder="Brief description (optional)"
                 />
-              }
-              label="Save Model Checkpoints"
-              sx={{ 
-                '& .MuiFormControlLabel-label': {
-                  fontWeight: 500
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Model Type"
+                  value={formData.model_type}
+                  onChange={handleChange('model_type')}
+                  helperText="Select the machine learning model architecture"
+                >
+                  {modelTypes.map((option) => (
+                    <MenuItem key={option.value} value={option.value} sx={{ py: 1 }}>
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                          {option.label}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          {option.category}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Dataset"
+                  value={formData.dataset_path}
+                  onChange={handleChange('dataset_path')}
+                  helperText={(datasets && datasets.length === 0) ? 'Please upload a dataset first in the Datasets tab' : 'Select a dataset from the manager'}
+                  disabled={!datasets || datasets.length === 0}
+                  required
+                  error={!datasets || datasets.length === 0}
+                >
+                  {datasets && Array.isArray(datasets) ? datasets.map((option) => (
+                    <MenuItem key={option?.name || 'unknown'} value={`datasets/${option?.name || 'unknown'}`}>
+                      {option?.name || 'Unknown Dataset'}
+                    </MenuItem>
+                  )) : null}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Workers"
+                  type="number"
+                  value={formData.num_workers}
+                  onChange={handleChange('num_workers')}
+                  inputProps={{ min: 1, max: 10 }}
+                  helperText="Number of parallel workers"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Epochs"
+                  type="number"
+                  value={formData.epochs}
+                  onChange={handleChange('epochs')}
+                  inputProps={{ min: 1, max: 100 }}
+                  helperText="Training iterations"
+                />
+              </Grid>
+            </Grid>
+          </Box>
+
+          {/* Hyperparameters */}
+          <Box sx={{ mb: 4 }}>
+            <SectionHeader icon={TuneRoundedIcon} title="Hyperparameters" />
+            <Grid container spacing={2.5}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Learning Rate"
+                  type="number"
+                  value={formData.learning_rate}
+                  onChange={handleChange('learning_rate')}
+                  placeholder="0.001"
+                  inputProps={{ step: 0.0001, min: 0.0001, max: 1 }}
+                  helperText="Learning rate for optimization"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Batch Size"
+                  type="number"
+                  value={formData.batch_size}
+                  onChange={handleChange('batch_size')}
+                  placeholder="32"
+                  inputProps={{ min: 1, max: 512 }}
+                  helperText="Number of samples per batch"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Optimizer"
+                  value={formData.optimizer}
+                  onChange={handleChange('optimizer')}
+                  helperText="Optimization algorithm"
+                >
+                  {optimizerOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Loss Function"
+                  value={formData.loss_function}
+                  onChange={handleChange('loss_function')}
+                  helperText="Loss function for training"
+                >
+                  {lossOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Validation Split"
+                  type="number"
+                  value={formData.validation_split}
+                  onChange={handleChange('validation_split')}
+                  placeholder="0.2"
+                  inputProps={{ step: 0.1, min: 0, max: 0.9 }}
+                  helperText="Fraction of data to use for validation (0.0-0.9)"
+                />
+              </Grid>
+            </Grid>
+          </Box>
+
+          {/* Training configuration */}
+          <Box sx={{ mb: 3 }}>
+            <SectionHeader icon={SettingsRoundedIcon} title="Training Configuration" />
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 0.5, sm: 3 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={formData.early_stopping}
+                    onChange={(e) => setFormData({ ...formData, early_stopping: e.target.checked })}
+                  />
                 }
-              }}
-            />
+                label="Enable Early Stopping"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={formData.save_checkpoints}
+                    onChange={(e) => setFormData({ ...formData, save_checkpoints: e.target.checked })}
+                  />
+                }
+                label="Save Model Checkpoints"
+              />
+            </Stack>
           </Box>
 
           {(!formData.job_name || formData.job_name.trim() === '') && (
@@ -694,61 +430,17 @@ const JobSubmissionForm = ({ onSubmit, loading, datasets, onNotification }) => {
             </Alert>
           )}
 
-          <Box sx={{ 
-            display: 'flex', 
-            gap: 1.5, 
-            mb: 3, 
-            flexWrap: 'wrap',
-            p: 2,
-            background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05))',
-            borderRadius: '12px',
-            border: '1px solid rgba(102, 126, 234, 0.1)'
-          }}>
-            <Chip 
-              label={`${formData.num_workers || 0} Workers`} 
-              size="medium" 
-              sx={{ 
-                background: 'primary.main',
-                color: 'white',
-                fontWeight: 600
-              }} 
-            />
-            <Chip 
-              label={`${formData.epochs || 0} Epochs`} 
-              size="medium"
-              sx={{ 
-                background: 'secondary.main',
-                color: 'white',
-                fontWeight: 600
-              }} 
-            />
-            <Chip 
-              label={`LR: ${formData.learning_rate || '0'}`} 
-              size="medium"
-              sx={{ 
-                background: 'success.main',
-                color: 'white',
-                fontWeight: 600
-              }} 
-            />
-            <Chip 
-              label={`Batch: ${formData.batch_size || '0'}`} 
-              size="medium"
-              sx={{ 
-                background: 'info.main',
-                color: 'white',
-                fontWeight: 600
-              }} 
-            />
-            <Chip 
-              label={(formData.optimizer || 'unknown').toUpperCase()} 
-              size="medium"
-              sx={{ 
-                background: 'warning.main',
-                color: 'white',
-                fontWeight: 600
-              }} 
-            />
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Run Summary
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Chip size="small" color="primary" label={`${formData.num_workers || 0} Workers`} />
+              <Chip size="small" color="secondary" label={`${formData.epochs || 0} Epochs`} />
+              <Chip size="small" color="success" label={`LR: ${formData.learning_rate || '0'}`} />
+              <Chip size="small" color="info" label={`Batch: ${formData.batch_size || '0'}`} />
+              <Chip size="small" color="warning" label={(formData.optimizer || 'unknown').toUpperCase()} />
+            </Box>
           </Box>
 
           <Button
@@ -757,32 +449,12 @@ const JobSubmissionForm = ({ onSubmit, loading, datasets, onNotification }) => {
             fullWidth
             size="large"
             disabled={loading || !datasets || datasets.length === 0 || !formData.dataset_path || !formData.job_name}
-            startIcon={loading ? <CircularProgress size={20} /> : <SendIcon />}
-            sx={{ 
-              mt: 3,
-              py: 1.5,
-              fontSize: '1.1rem',
-              fontWeight: 600,
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #667eea, #764ba2)',
-              boxShadow: '0 4px 15px rgba(102, 126, 234, 0.4)',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #5a67d8, #6b46c1)',
-                boxShadow: '0 6px 20px rgba(102, 126, 234, 0.6)',
-                transform: 'translateY(-2px)',
-              },
-              '&:disabled': {
-                background: 'grey.400',
-                boxShadow: 'none',
-                transform: 'none',
-              },
-              transition: 'all 0.3s ease'
-            }}
+            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SendRoundedIcon />}
           >
-            {loading 
-              ? 'Submitting Training Job...' 
+            {loading
+              ? 'Submitting Training Job...'
               : (!datasets || datasets.length === 0)
-                ? 'Upload Dataset First' 
+                ? 'Upload Dataset First'
                 : !formData.job_name
                   ? 'Enter Job Name'
                   : 'Review & Submit Job'}

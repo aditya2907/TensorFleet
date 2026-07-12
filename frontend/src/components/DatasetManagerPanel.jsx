@@ -10,7 +10,6 @@ import {
   Divider,
   Button,
   IconButton,
-  CircularProgress,
   LinearProgress,
   Alert,
   Dialog,
@@ -21,7 +20,7 @@ import {
   Skeleton,
 } from '@mui/material';
 import { CloudUpload as CloudUploadIcon, Delete as DeleteIcon, FolderOpen as FolderOpenIcon } from '@mui/icons-material';
-import { storageAPI } from '../api/api';
+import { storageAPI, getErrorMessage } from '../api/api';
 
 const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
   const [datasets, setDatasets] = useState([]);
@@ -41,7 +40,7 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
       console.error('Error fetching datasets:', error);
       onNotification({
         open: true,
-        message: `Failed to load datasets: ${error.message}`,
+        message: `Failed to load datasets: ${getErrorMessage(error)}`,
         severity: 'error',
       });
     } finally {
@@ -78,7 +77,7 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
       } else if (error.response?.status === 415) {
         errorMessage = 'Unsupported file type. Please upload CSV files only.';
       } else {
-        errorMessage = error.message || 'An unexpected error occurred during upload';
+        errorMessage = getErrorMessage(error);
       }
       onNotification({
         open: true,
@@ -109,7 +108,7 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
     } catch (error) {
       onNotification({
         open: true,
-        message: `Delete failed: ${error.message}`,
+        message: `Delete failed: ${getErrorMessage(error)}`,
         severity: 'error',
       });
     } finally {
@@ -126,9 +125,12 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
   return (
     <Card>
       <CardContent>
-        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
-          💾 Dataset Manager
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <FolderOpenIcon fontSize="small" color="primary" />
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Dataset Manager
+          </Typography>
+        </Box>
         <Button
           variant="contained"
           component="label"
@@ -142,7 +144,11 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
         {uploading && <LinearProgress variant="determinate" value={uploadProgress} sx={{ mt: 1 }} />}
         <Divider sx={{ my: 2 }} />
         {loading ? (
-          <CircularProgress />
+          <Box sx={{ py: 1 }}>
+            <Skeleton height={32} />
+            <Skeleton height={32} />
+            <Skeleton height={32} width="70%" />
+          </Box>
         ) : (
           <List sx={{ maxHeight: 300, overflow: 'auto' }}>
             {datasets.map((ds) => (
@@ -161,12 +167,9 @@ const DatasetManagerPanel = ({ onNotification, onDatasetChange }) => {
         )}
         {datasets.length === 0 && !loading && (
           <Box sx={{ py: 4, textAlign: 'center' }}>
-            <FolderOpenIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              No Datasets Yet
-            </Typography>
+            <FolderOpenIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
             <Typography variant="body2" color="text.secondary">
-              Upload a CSV dataset to start training models
+              No datasets yet — upload a CSV dataset to start training models
             </Typography>
           </Box>
         )}

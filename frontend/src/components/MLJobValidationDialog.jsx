@@ -12,14 +12,15 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
-  Divider,
   Chip,
   Grid,
 } from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import WarningIcon from '@mui/icons-material/Warning';
-import ErrorIcon from '@mui/icons-material/Error';
-import InfoIcon from '@mui/icons-material/Info';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import WarningRoundedIcon from '@mui/icons-material/WarningRounded';
+import ErrorRoundedIcon from '@mui/icons-material/ErrorRounded';
+import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded';
+import SummarizeRoundedIcon from '@mui/icons-material/SummarizeRounded';
+import QueryStatsRoundedIcon from '@mui/icons-material/QueryStatsRounded';
 
 const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
   const [validationResults, setValidationResults] = useState({
@@ -37,7 +38,7 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
 
   const validateJobConfiguration = () => {
     if (!jobData) return;
-    
+
     const errors = [];
     const warnings = [];
     const info = [];
@@ -117,7 +118,7 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
 
   const estimateTrainingTime = () => {
     if (!jobData) return 'Unknown';
-    
+
     const baseMinutes = {
       'resnet50': 30,
       'resnet101': 45,
@@ -135,9 +136,9 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
     const base = baseMinutes[jobData.model_type] || 30;
     const epochMultiplier = (jobData.epochs || 10) / 10;
     const workerDivisor = Math.max(1, (jobData.num_workers || 1) * 0.8); // Diminishing returns
-    
+
     const estimatedMinutes = Math.round((base * epochMultiplier) / workerDivisor);
-    
+
     if (estimatedMinutes < 60) {
       return `~${estimatedMinutes} minutes`;
     } else {
@@ -149,7 +150,7 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
 
   const estimateMemoryUsage = () => {
     if (!jobData) return 'Unknown';
-    
+
     const baseGB = {
       'resnet50': 4,
       'resnet101': 6,
@@ -168,15 +169,15 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
     const base = baseGB[jobData.model_type] || 4;
     const batchMultiplier = (jobData.hyperparameters?.batch_size || 32) / 32;
     const workerMultiplier = jobData.num_workers || 1;
-    
+
     const estimatedGB = Math.round(base * batchMultiplier * workerMultiplier * 10) / 10;
-    
+
     return `~${estimatedGB} GB per worker`;
   };
 
   const estimateComputeResources = () => {
     if (!jobData) return 'Unknown';
-    
+
     const intensity = {
       'resnet50': 'Medium',
       'resnet101': 'High',
@@ -200,9 +201,10 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
-        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          🔍 Job Configuration Validation
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <FactCheckRoundedIcon fontSize="small" color="primary" />
+          Job Configuration Validation
+        </Box>
       </DialogTitle>
       <DialogContent>
         {!jobData ? (
@@ -222,7 +224,7 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
                 {validationResults.errors.map((error, index) => (
                   <ListItem key={index} disablePadding>
                     <ListItemIcon sx={{ minWidth: 32 }}>
-                      <ErrorIcon color="error" fontSize="small" />
+                      <ErrorRoundedIcon color="error" fontSize="small" />
                     </ListItemIcon>
                     <ListItemText primary={error} />
                   </ListItem>
@@ -242,7 +244,7 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
                 {validationResults.warnings.map((warning, index) => (
                   <ListItem key={index} disablePadding>
                     <ListItemIcon sx={{ minWidth: 32 }}>
-                      <WarningIcon color="warning" fontSize="small" />
+                      <WarningRoundedIcon color="warning" fontSize="small" />
                     </ListItemIcon>
                     <ListItemText primary={warning} />
                   </ListItem>
@@ -254,51 +256,45 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
 
         {/* Job Summary */}
         {jobData && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-              📋 Job Summary
-            </Typography>
-            <Grid container spacing={1}>
-              <Grid item xs={12} sm={6}>
-                <Chip label={`${jobData.job_name || jobData.hyperparameters?.job_name || 'Unnamed Job'}`} variant="outlined" size="small" />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Chip label={`${jobData.model_type || 'No Model'}`} variant="outlined" size="small" />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Chip label={`${jobData.epochs || 0} epochs`} variant="outlined" size="small" />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Chip label={`${jobData.num_workers || 0} workers`} variant="outlined" size="small" />
-              </Grid>
-            </Grid>
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <SummarizeRoundedIcon fontSize="small" color="primary" />
+              <Typography variant="h6">Job Summary</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Chip label={`${jobData.job_name || jobData.hyperparameters?.job_name || 'Unnamed Job'}`} variant="outlined" size="small" />
+              <Chip label={`${jobData.model_type || 'No Model'}`} variant="outlined" size="small" />
+              <Chip label={`${jobData.epochs || 0} epochs`} variant="outlined" size="small" />
+              <Chip label={`${jobData.num_workers || 0} workers`} variant="outlined" size="small" />
+            </Box>
           </Box>
         )}
 
         {/* Estimations */}
         <Box sx={{ mb: 2 }}>
-          <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-            ⏱️ Resource Estimations
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={4}>
-              <Typography variant="caption" color="text.secondary">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <QueryStatsRoundedIcon fontSize="small" color="primary" />
+            <Typography variant="h6">Resource Estimations</Typography>
+          </Box>
+          <Grid container spacing={2.5}>
+            <Grid item xs={12} sm={4}>
+              <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
                 Training Time
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 {validationResults.estimations.trainingTime}
               </Typography>
             </Grid>
-            <Grid item xs={4}>
-              <Typography variant="caption" color="text.secondary">
+            <Grid item xs={12} sm={4}>
+              <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
                 Memory Usage
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 {validationResults.estimations.memoryUsage}
               </Typography>
             </Grid>
-            <Grid item xs={4}>
-              <Typography variant="caption" color="text.secondary">
+            <Grid item xs={12} sm={4}>
+              <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
                 Compute Intensity
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -311,7 +307,7 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
         {canSubmit && (
           <Alert severity="success" sx={{ mb: 2 }}>
             <Typography component="div" variant="body2">
-              ✅ Configuration looks good! Ready to submit training job.
+              Configuration looks good! Ready to submit training job.
             </Typography>
           </Alert>
         )}
@@ -322,11 +318,11 @@ const MLJobValidationDialog = ({ open, onClose, jobData, onConfirm }) => {
         <Button onClick={onClose}>
           Cancel
         </Button>
-        <Button 
-          onClick={onConfirm} 
-          variant="contained" 
+        <Button
+          onClick={onConfirm}
+          variant="contained"
           disabled={!canSubmit}
-          startIcon={<CheckCircleIcon />}
+          startIcon={<CheckCircleRoundedIcon />}
         >
           {canSubmit ? 'Submit Job' : 'Fix Errors First'}
         </Button>

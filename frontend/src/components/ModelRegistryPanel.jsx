@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -24,18 +24,28 @@ import {
   TextField,
   Collapse,
   Skeleton,
-  Alert,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import DownloadIcon from '@mui/icons-material/Download';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import SortIcon from '@mui/icons-material/Sort';
+import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import ModelTrainingIcon from '@mui/icons-material/ModelTraining';
-import { modelServiceAPI, storageAPI } from '../api/api';
+import { modelServiceAPI, storageAPI, getErrorMessage } from '../api/api';
+import { monoFontFamily } from '../theme/typography';
+import { usePolling } from '../hooks/usePolling';
 import ModelComparisonDialog from './ModelComparisonDialog';
+
+// Semantic status → chip color mapping per the design system.
+const STATUS_CHIP_COLOR = {
+  RUNNING: 'info',
+  PENDING: 'warning',
+  COMPLETED: 'success',
+  FAILED: 'error',
+  CANCELLED: 'default',
+};
 
 const ModelRegistryPanel = ({ onNotification }) => {
   const [models, setModels] = useState([]);
@@ -52,39 +62,39 @@ const ModelRegistryPanel = ({ onNotification }) => {
     const algorithm = model.algorithm || 'Unknown';
     const accuracy = model.evaluation_metrics?.accuracy || 0;
     const created = model.created_at ? new Date(model.created_at) : new Date();
-    
+
     // Algorithm name mapping for better display
     const algorithmNames = {
       'random_forest': 'RandomForest',
-      'logistic_regression': 'LogisticRegression', 
+      'logistic_regression': 'LogisticRegression',
       'svm': 'SVM',
       'dnn': 'DeepNN',
       'cnn': 'ConvNet',
       'resnet50': 'ResNet50',
       'bert_large': 'BERT-Large',
       'bert-large': 'BERT-Large',
-      'bert_base': 'BERT-Base', 
+      'bert_base': 'BERT-Base',
       'bert-base': 'BERT-Base'
     };
-    
+
     const displayAlgorithm = algorithmNames[algorithm.toLowerCase()] || algorithm;
     const accuracyPercent = (accuracy * 100).toFixed(1);
     const shortDate = created.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    
+
     return `${displayAlgorithm}_${accuracyPercent}%_${shortDate}`;
   };
 
   // Utility function to clean up existing UUID-based names
   const cleanModelName = (originalName) => {
     if (!originalName) return 'Unknown Model';
-    
+
     // If name starts with UUID pattern (8-4-4-4-12 characters), extract meaningful part
     const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}_/i;
     if (uuidPattern.test(originalName)) {
       // Remove UUID prefix and return the meaningful part
       return originalName.replace(uuidPattern, '').replace(/[_-]/g, ' ');
     }
-    
+
     return originalName;
   };
 
@@ -94,21 +104,21 @@ const ModelRegistryPanel = ({ onNotification }) => {
       // Try storage API first for model metadata
       const storageResponse = await storageAPI.getModels();
       const storageModels = storageResponse.data.models || [];
-      
+
       // Also get file information from MinIO
       const filesResponse = await storageAPI.listModels();
       const modelFiles = filesResponse.data.objects || [];
-      
+
       // Combine metadata with file information and use real training data
       const enhancedModels = storageModels.map((model, index) => {
-        const matchingFile = modelFiles.find(file => 
+        const matchingFile = modelFiles.find(file =>
           file.name.includes(model.name) || file.name.includes(model._id)
         );
-        
+
         // Use real metrics from the model if available, otherwise provide defaults
         const realMetrics = model.metrics || {};
         const realHyperparams = model.hyperparameters || {};
-        
+
         return {
           ...model,
           display_name: generateDisplayName({ ...model, evaluation_metrics: { accuracy: realMetrics.accuracy || 0 } }),
@@ -128,7 +138,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
             completed_tasks: realMetrics.completed_tasks || 0,
             total_tasks: realMetrics.total_tasks || 0,
             progress: realMetrics.total_tasks > 0 ? (realMetrics.completed_tasks / realMetrics.total_tasks) * 100 : 0,
-            // Use training configuration from multiple sources  
+            // Use training configuration from multiple sources
             epochs: model.epochs || realHyperparams.epochs || parseInt(realHyperparams.epochs) || (realMetrics.total_tasks || 100),
             batch_size: model.batch_size || parseInt(realHyperparams.batch_size) || 32,
             learning_rate: model.learning_rate || parseFloat(realHyperparams.learning_rate) || 0.001
@@ -146,7 +156,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
           }
         };
       });
-      
+
       setModels(enhancedModels);
     } catch (error) {
       console.error('Error fetching models:', error);
@@ -157,7 +167,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
       } catch (fallbackError) {
         onNotification({
           open: true,
-          message: `Failed to load models: ${error.message}`,
+          message: `Failed to load models: ${getErrorMessage(error)}`,
           severity: 'error',
         });
       }
@@ -166,11 +176,8 @@ const ModelRegistryPanel = ({ onNotification }) => {
     }
   };
 
-  useEffect(() => {
-    fetchModels();
-    const interval = setInterval(fetchModels, 10000); // Refresh every 10 seconds to catch auto-saved models
-    return () => clearInterval(interval);
-  }, []);
+  // Refresh every 10 seconds to catch auto-saved models; pauses when tab is hidden.
+  usePolling(fetchModels, 10000);
 
   const handleDownload = async (model) => {
     try {
@@ -179,10 +186,10 @@ const ModelRegistryPanel = ({ onNotification }) => {
       if (!modelId) {
         throw new Error('Model ID is missing');
       }
-      
+
       // Use storage API to download model from MinIO
       const response = await storageAPI.downloadModel(modelId);
-      
+
       // Create download link from blob response
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -192,7 +199,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
       link.click();
       link.parentNode.removeChild(link);
       window.URL.revokeObjectURL(url); // Clean up
-      
+
       onNotification({
         open: true,
         message: `Downloading model: ${model.display_name || model.name}`,
@@ -201,7 +208,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
     } catch (error) {
       console.error('Error downloading model:', error);
       let errorMessage = 'Failed to download model';
-      
+
       if (error.response) {
         // Server responded with error
         if (error.response.status === 404) {
@@ -218,9 +225,9 @@ const ModelRegistryPanel = ({ onNotification }) => {
         errorMessage = 'Cannot connect to storage service. Please check your connection.';
       } else {
         // Something else happened
-        errorMessage = error.message || 'An unexpected error occurred';
+        errorMessage = getErrorMessage(error);
       }
-      
+
       onNotification({
         open: true,
         message: errorMessage,
@@ -274,15 +281,15 @@ const ModelRegistryPanel = ({ onNotification }) => {
 
   const filterModels = (modelsToFilter) => {
     let filtered = modelsToFilter;
-    
+
     // Filter by algorithm type
     if (filterBy !== 'all') {
-      filtered = filtered.filter(model => 
+      filtered = filtered.filter(model =>
         model.algorithm?.toLowerCase().includes(filterBy.toLowerCase()) ||
         model.algorithm_details?.architecture?.toLowerCase().includes(filterBy.toLowerCase())
       );
     }
-    
+
     // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(model =>
@@ -293,7 +300,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
         model.algorithm_details?.architecture?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
+
     return filtered;
   };
 
@@ -316,10 +323,13 @@ const ModelRegistryPanel = ({ onNotification }) => {
   return (
     <Card>
       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, m: 0 }}>
-            📦 Model Registry & Performance Analytics
-          </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ModelTrainingIcon fontSize="small" color="primary" />
+            <Typography variant="h6">
+              Model Registry &amp; Performance Analytics
+            </Typography>
+          </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Tooltip title="Refresh models list">
               <Button
@@ -330,7 +340,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
                 sx={{ minWidth: 'auto' }}
                 aria-label="Refresh models list"
               >
-                {loading ? <CircularProgress size={16} /> : '🔄'}
+                {loading ? <CircularProgress size={16} /> : <RefreshRoundedIcon fontSize="small" />}
               </Button>
             </Tooltip>
             <Button
@@ -347,16 +357,24 @@ const ModelRegistryPanel = ({ onNotification }) => {
 
         {/* Best Model Highlight */}
         {bestModel && (
-          <Paper sx={{ p: 2, mb: 2, bgcolor: 'success.lighter', border: '1px solid', borderColor: 'success.main' }}>
+          <Paper
+            sx={(theme) => ({
+              p: 2,
+              mb: 2,
+              backgroundColor: alpha(theme.palette.success.main, theme.palette.mode === 'dark' ? 0.12 : 0.08),
+              border: '1px solid',
+              borderColor: alpha(theme.palette.success.main, 0.4),
+            })}
+          >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <TrendingUpIcon color="success" />
               <Box sx={{ flexGrow: 1 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'success.dark' }}>
-                  🏆 Best Performing Model: {bestModel.display_name || bestModel.name} v{bestModel.version}
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                  Best Performing Model: {bestModel.display_name || bestModel.name} v{bestModel.version}
                 </Typography>
-                <Typography variant="body2" color="success.dark">
-                  Accuracy: {(bestModel.evaluation_metrics?.accuracy * 100).toFixed(2)}% | 
-                  Loss: {bestModel.evaluation_metrics?.loss?.toFixed(4) || 'N/A'} | 
+                <Typography variant="body2" color="text.secondary">
+                  Accuracy: {(bestModel.evaluation_metrics?.accuracy * 100).toFixed(2)}% |
+                  Loss: {bestModel.evaluation_metrics?.loss?.toFixed(4) || 'N/A'} |
                   Algorithm: {bestModel.algorithm || 'Unknown'}
                 </Typography>
               </Box>
@@ -414,11 +432,11 @@ const ModelRegistryPanel = ({ onNotification }) => {
         </Grid>
 
         <Divider sx={{ mb: 2 }} />
-        
+
         {loading && models.length === 0 ? (
           <Box sx={{ py: 2 }}>
             {[1, 2, 3].map((item) => (
-              <Paper key={item} sx={{ p: 2, mb: 2, borderRadius: 2 }}>
+              <Paper key={item} sx={{ p: 2, mb: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   <Skeleton variant="rectangular" width={40} height={40} />
                   <Box sx={{ flexGrow: 1 }}>
@@ -440,14 +458,13 @@ const ModelRegistryPanel = ({ onNotification }) => {
               const modelId = model.id || model._id || index;
               const isExpanded = expandedModels[modelId];
               const isTopPerformer = index < 3; // Mark top 3 as high performers
-              
+
               return (
                 <Box key={modelId} sx={{ mb: 1 }}>
-                  <Paper sx={{ 
-                    p: 1, 
-                    border: isTopPerformer ? '2px solid' : '1px solid',
-                    borderColor: isTopPerformer ? 'success.main' : 'grey.300',
-                    borderRadius: 2 
+                  <Paper sx={{
+                    p: 1,
+                    border: '1px solid',
+                    borderColor: isTopPerformer ? 'success.main' : 'divider',
                   }}>
                     <ListItem disablePadding>
                       <Checkbox
@@ -464,60 +481,64 @@ const ModelRegistryPanel = ({ onNotification }) => {
                               </Typography>
                             </Tooltip>
                             <Chip label={`v${model.version}`} size="small" color="primary" />
-                            {isTopPerformer && <Chip label="⭐ Top Performer" size="small" color="success" />}
-                            <Chip 
-                              label={`${(model.evaluation_metrics?.accuracy * 100).toFixed(1)}% ACC`} 
-                              size="small" 
+                            {isTopPerformer && <Chip label="Top Performer" size="small" color="success" />}
+                            <Chip
+                              label={`${(model.evaluation_metrics?.accuracy * 100).toFixed(1)}% ACC`}
+                              size="small"
                               color={model.evaluation_metrics?.accuracy > 0.9 ? 'success' : 'default'}
                             />
+                            {model.status && (
+                              <Chip
+                                label={model.status}
+                                size="small"
+                                color={STATUS_CHIP_COLOR[String(model.status).toUpperCase()] || 'default'}
+                              />
+                            )}
                           </Box>
                         }
                         secondary={
                           <Box sx={{ mt: 1 }}>
                             <Typography variant="body2" color="text.secondary">
-                              Algorithm: {model.algorithm_details?.architecture} | 
-                              F1: {model.evaluation_metrics?.f1_score > 0 
+                              Algorithm: {model.algorithm_details?.architecture} |
+                              F1: {model.evaluation_metrics?.f1_score > 0
                                 ? (model.evaluation_metrics.f1_score * 100).toFixed(1) + '%'
-                                : 'Estimated'} | 
+                                : 'Estimated'} |
                               Loss: {model.evaluation_metrics?.loss > 0
                                 ? model.evaluation_metrics.loss.toFixed(4)
-                                : 'N/A'} |
-                              Status: {model.status || 'Unknown'}
+                                : 'N/A'}
                             </Typography>
-                            
+
                             {/* Training Progress */}
                             {model.evaluation_metrics?.total_tasks > 0 && (
                               <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                                Training Progress: {model.evaluation_metrics.completed_tasks}/{model.evaluation_metrics.total_tasks} tasks 
+                                Training Progress: {model.evaluation_metrics.completed_tasks}/{model.evaluation_metrics.total_tasks} tasks
                                 ({model.evaluation_metrics.progress.toFixed(1)}%)
                               </Typography>
                             )}
-                            
+
                             {/* Performance Bars */}
                             <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
                               <Box sx={{ flexGrow: 1 }}>
                                 <Typography variant="caption" color="text.secondary">
-                                  Accuracy: {model.evaluation_metrics?.accuracy > 0 
+                                  Accuracy: {model.evaluation_metrics?.accuracy > 0
                                     ? (model.evaluation_metrics.accuracy * 100).toFixed(1) + '%'
                                     : 'Training...'}
                                 </Typography>
-                                <LinearProgress 
-                                  variant={model.evaluation_metrics?.accuracy > 0 ? "determinate" : "indeterminate"} 
-                                  value={model.evaluation_metrics?.accuracy > 0 ? model.evaluation_metrics.accuracy * 100 : 0} 
-                                  sx={{ height: 6, borderRadius: 3 }}
+                                <LinearProgress
+                                  variant={model.evaluation_metrics?.accuracy > 0 ? "determinate" : "indeterminate"}
+                                  value={model.evaluation_metrics?.accuracy > 0 ? model.evaluation_metrics.accuracy * 100 : 0}
                                   color={model.evaluation_metrics?.accuracy > 0.9 ? 'success' : 'primary'}
                                 />
                               </Box>
                               <Box sx={{ flexGrow: 1 }}>
                                 <Typography variant="caption" color="text.secondary">
-                                  Loss: {model.evaluation_metrics?.loss > 0 
+                                  Loss: {model.evaluation_metrics?.loss > 0
                                     ? model.evaluation_metrics.loss.toFixed(3)
                                     : 'N/A'}
                                 </Typography>
-                                <LinearProgress 
-                                  variant={model.evaluation_metrics?.loss > 0 ? "determinate" : "indeterminate"} 
-                                  value={model.evaluation_metrics?.loss > 0 ? Math.max(0, Math.min(100, (1 - model.evaluation_metrics.loss) * 100)) : 0} 
-                                  sx={{ height: 6, borderRadius: 3 }}
+                                <LinearProgress
+                                  variant={model.evaluation_metrics?.loss > 0 ? "determinate" : "indeterminate"}
+                                  value={model.evaluation_metrics?.loss > 0 ? Math.max(0, Math.min(100, (1 - model.evaluation_metrics.loss) * 100)) : 0}
                                   color={model.evaluation_metrics?.loss < 0.5 ? 'success' : 'warning'}
                                 />
                               </Box>
@@ -527,8 +548,8 @@ const ModelRegistryPanel = ({ onNotification }) => {
                       />
                       <Box sx={{ display: 'flex', gap: 1 }}>
                         <Tooltip title={isExpanded ? "Hide details" : "View details"}>
-                          <IconButton 
-                            onClick={() => toggleExpanded(modelId)} 
+                          <IconButton
+                            onClick={() => toggleExpanded(modelId)}
                             size="small"
                             aria-label={isExpanded ? "Hide model details" : "View model details"}
                             aria-expanded={isExpanded}
@@ -548,20 +569,20 @@ const ModelRegistryPanel = ({ onNotification }) => {
                         </Button>
                       </Box>
                     </ListItem>
-                    
+
                     <Collapse in={isExpanded}>
-                      <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1, mt: 1 }}>
+                      <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1, mt: 1 }}>
                         <Grid container spacing={2}>
                           <Grid item xs={12} md={6}>
                             <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                              📊 Evaluation Metrics
+                              Evaluation Metrics
                             </Typography>
                             <Paper sx={{ p: 1.5 }}>
                               <Grid container spacing={2}>
                                 <Grid item xs={6}>
                                   <Typography variant="caption" color="text.secondary">Accuracy</Typography>
                                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                    {model.evaluation_metrics?.accuracy > 0 
+                                    {model.evaluation_metrics?.accuracy > 0
                                       ? (model.evaluation_metrics.accuracy * 100).toFixed(2) + '%'
                                       : 'N/A'}
                                   </Typography>
@@ -569,7 +590,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
                                 <Grid item xs={6}>
                                   <Typography variant="caption" color="text.secondary">Loss</Typography>
                                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                    {model.evaluation_metrics?.loss > 0 
+                                    {model.evaluation_metrics?.loss > 0
                                       ? model.evaluation_metrics.loss.toFixed(4)
                                       : 'N/A'}
                                   </Typography>
@@ -577,7 +598,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
                                 <Grid item xs={6}>
                                   <Typography variant="caption" color="text.secondary">Training Progress</Typography>
                                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                    {model.evaluation_metrics?.total_tasks > 0 
+                                    {model.evaluation_metrics?.total_tasks > 0
                                       ? `${model.evaluation_metrics.completed_tasks}/${model.evaluation_metrics.total_tasks} (${model.evaluation_metrics.progress.toFixed(1)}%)`
                                       : 'N/A'}
                                   </Typography>
@@ -585,7 +606,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
                                 <Grid item xs={6}>
                                   <Typography variant="caption" color="text.secondary">Model Size</Typography>
                                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                    {model.size_bytes 
+                                    {model.size_bytes
                                       ? `${(model.size_bytes / 1024).toFixed(1)} KB`
                                       : 'N/A'}
                                   </Typography>
@@ -595,7 +616,7 @@ const ModelRegistryPanel = ({ onNotification }) => {
                           </Grid>
                           <Grid item xs={12} md={6}>
                             <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                              🔧 Algorithm Details
+                              Algorithm Details
                             </Typography>
                             <Paper sx={{ p: 1.5 }}>
                               <Typography variant="caption" color="text.secondary">Algorithm</Typography>
@@ -603,11 +624,11 @@ const ModelRegistryPanel = ({ onNotification }) => {
                                 {model.algorithm || 'Unknown'}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">Job ID</Typography>
-                              <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, fontFamily: monoFontFamily }}>
                                 {model.job_id?.substring(0, 8) || 'N/A'}...
                               </Typography>
                               <Typography variant="caption" color="text.secondary">Model Path</Typography>
-                              <Typography variant="body2" sx={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>
+                              <Typography variant="body2" sx={{ fontSize: '0.75rem', wordBreak: 'break-all', fontFamily: monoFontFamily }}>
                                 {model.minio_path ? model.minio_path.split('/').pop() : 'N/A'}
                               </Typography>
                               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>Created</Typography>
@@ -625,24 +646,21 @@ const ModelRegistryPanel = ({ onNotification }) => {
             })}
           </List>
         )}
-        
+
         {filteredSortedModels.length === 0 && !loading && (
           <Box sx={{ py: 6, textAlign: 'center' }}>
-            <ModelTrainingIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              {models.length === 0 ? 'No Models Yet' : 'No Models Found'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              {models.length === 0 
-                ? 'Train your first model to see it here. New models will have clean, semantic names like "RandomForest_95.2%_Dec16"!'
-                : 'Try adjusting your search or filter criteria. Search by algorithm name or performance.'}
+            <ModelTrainingIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1.5 }} />
+            <Typography variant="body2" color="text.secondary">
+              {models.length === 0
+                ? 'No models yet — train your first model to see it here.'
+                : 'No models match your search or filter criteria.'}
             </Typography>
             {models.length === 0 && (
-              <Button 
-                variant="contained" 
+              <Button
+                variant="contained"
                 color="primary"
                 onClick={() => window.location.hash = '#submit'}
-                sx={{ mt: 2 }}
+                sx={{ mt: 3 }}
               >
                 Submit Training Job
               </Button>

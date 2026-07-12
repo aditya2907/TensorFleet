@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -10,26 +10,24 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Divider,
   Button,
   IconButton,
-  CircularProgress,
   LinearProgress,
-  Alert,
   Chip,
   Grid,
-  Paper,
+  Skeleton,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import {
   CloudUpload as CloudUploadIcon,
   Delete as DeleteIcon,
-  Folder as FolderIcon,
   InsertDriveFile as FileIcon,
   Storage as StorageIcon,
   Refresh as RefreshIcon,
-  Download as DownloadIcon,
+  FolderOpen as FolderOpenIcon,
 } from '@mui/icons-material';
-import { storageAPI } from '../api/api';
+import { storageAPI, getErrorMessage } from '../api/api';
+import { usePolling } from '../hooks/usePolling';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -41,7 +39,7 @@ function TabPanel(props) {
       aria-labelledby={`storage-tab-${index}`}
       {...other}
     >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+      {value === index && <Box sx={{ pt: 2.5 }}>{children}</Box>}
     </div>
   );
 }
@@ -77,7 +75,7 @@ const StorageOverviewPanel = ({ onNotification }) => {
         storageAPI.listArtifacts(),
         storageAPI.listJobFiles(),
       ]);
-      
+
       setDatasets(datasetsRes.data.objects || []);
       setModels(modelsRes.data.objects || []);
       setCheckpoints(checkpointsRes.data.objects || []);
@@ -87,7 +85,7 @@ const StorageOverviewPanel = ({ onNotification }) => {
       console.error('Error fetching bucket data:', error);
       onNotification({
         open: true,
-        message: `Failed to load storage data: ${error.message}`,
+        message: `Failed to load storage data: ${getErrorMessage(error)}`,
         severity: 'error',
       });
     } finally {
@@ -95,16 +93,11 @@ const StorageOverviewPanel = ({ onNotification }) => {
     }
   };
 
-  useEffect(() => {
+  // Refresh every 30 seconds (pauses while the tab is hidden).
+  usePolling(() => {
     fetchStorageStats();
     fetchBucketData();
-    // Refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchStorageStats();
-      fetchBucketData();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  }, 30000);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -136,7 +129,7 @@ const StorageOverviewPanel = ({ onNotification }) => {
         default:
           throw new Error(`Upload not supported for ${bucket} bucket`);
       }
-      
+
       await uploadPromise;
       onNotification({
         open: true,
@@ -148,7 +141,7 @@ const StorageOverviewPanel = ({ onNotification }) => {
     } catch (error) {
       onNotification({
         open: true,
-        message: `Upload failed: ${error.message}`,
+        message: `Upload failed: ${getErrorMessage(error)}`,
         severity: 'error',
       });
     } finally {
@@ -177,7 +170,7 @@ const StorageOverviewPanel = ({ onNotification }) => {
         default:
           throw new Error(`Delete not supported for ${bucket} bucket`);
       }
-      
+
       onNotification({
         open: true,
         message: `Deleted from ${bucket} successfully!`,
@@ -188,7 +181,7 @@ const StorageOverviewPanel = ({ onNotification }) => {
     } catch (error) {
       onNotification({
         open: true,
-        message: `Failed to delete: ${error.message}`,
+        message: `Failed to delete: ${getErrorMessage(error)}`,
         severity: 'error',
       });
     }
@@ -223,10 +216,12 @@ const StorageOverviewPanel = ({ onNotification }) => {
           {uploading && <LinearProgress variant="determinate" value={uploadProgress} sx={{ mt: 1 }} />}
         </Box>
       )}
-      
+
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-          <CircularProgress />
+        <Box sx={{ py: 1 }}>
+          {[0, 1, 2].map((row) => (
+            <Skeleton key={row} height={40} sx={{ mb: 0.5 }} />
+          ))}
         </Box>
       ) : (
         <List sx={{ maxHeight: 400, overflow: 'auto' }}>
@@ -235,9 +230,9 @@ const StorageOverviewPanel = ({ onNotification }) => {
               key={file.name}
               secondaryAction={
                 canDelete && (
-                  <IconButton 
-                    edge="end" 
-                    aria-label="delete" 
+                  <IconButton
+                    edge="end"
+                    aria-label="delete"
                     onClick={handleDelete(bucket, file.name)}
                   >
                     <DeleteIcon />
@@ -265,11 +260,14 @@ const StorageOverviewPanel = ({ onNotification }) => {
           ))}
         </List>
       )}
-      
+
       {files.length === 0 && !loading && (
-        <Alert severity="info" sx={{ mt: 2 }}>
-          No files found in {bucket} bucket.
-        </Alert>
+        <Box sx={{ py: 5, textAlign: 'center' }}>
+          <FolderOpenIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+          <Typography variant="body2" color="text.secondary">
+            No files in the {bucket} bucket yet
+          </Typography>
+        </Box>
       )}
     </Box>
   );
@@ -277,43 +275,50 @@ const StorageOverviewPanel = ({ onNotification }) => {
   return (
     <Card>
       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            💾 Storage Overview
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <StorageIcon fontSize="small" color="primary" />
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Storage Overview
           </Typography>
-          <IconButton onClick={() => { fetchStorageStats(); fetchBucketData(); }}>
-            <RefreshIcon />
+          <IconButton size="small" onClick={() => { fetchStorageStats(); fetchBucketData(); }}>
+            <RefreshIcon fontSize="small" />
           </IconButton>
         </Box>
 
         {/* Storage Statistics */}
         {storageStats && (
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12}>
-              <Paper sx={{ p: 2, bgcolor: 'primary.lighter' }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Storage Summary
-                </Typography>
-                <Grid container spacing={2}>
-                  {Object.entries(storageStats.buckets || {}).map(([bucket, stats]) => (
-                    <Grid item xs={6} sm={4} md={2.4} key={bucket}>
-                      <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h6" color="primary">
-                          {stats.object_count}
-                        </Typography>
-                        <Typography variant="caption" sx={{ textTransform: 'capitalize' }}>
-                          {bucket}
-                        </Typography>
-                        <Typography variant="caption" display="block" color="textSecondary">
-                          {formatFileSize(stats.total_size_bytes)}
-                        </Typography>
-                      </Box>
-                    </Grid>
-                  ))}
+          <Box
+            sx={(theme) => ({
+              p: 2,
+              mb: 3,
+              borderRadius: '12px',
+              backgroundColor: alpha(
+                theme.palette.primary.main,
+                theme.palette.mode === 'dark' ? 0.12 : 0.05,
+              ),
+            })}
+          >
+            <Typography variant="subtitle2" gutterBottom>
+              Storage Summary
+            </Typography>
+            <Grid container spacing={2}>
+              {Object.entries(storageStats.buckets || {}).map(([bucket, stats]) => (
+                <Grid item xs={6} sm={4} md={2.4} key={bucket}>
+                  <Box sx={{ textAlign: 'center' }}>
+                    <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
+                      {bucket}
+                    </Typography>
+                    <Typography variant="h3" sx={{ fontWeight: 700, lineHeight: 1.15 }}>
+                      {stats.object_count}
+                    </Typography>
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      {formatFileSize(stats.total_size_bytes)}
+                    </Typography>
+                  </Box>
                 </Grid>
-              </Paper>
+              ))}
             </Grid>
-          </Grid>
+          </Box>
         )}
 
         <Tabs value={activeTab} onChange={handleTabChange} variant="scrollable" scrollButtons="auto">
@@ -327,19 +332,19 @@ const StorageOverviewPanel = ({ onNotification }) => {
         <TabPanel value={activeTab} index={0}>
           {renderFileList(datasets, 'datasets', true, true)}
         </TabPanel>
-        
+
         <TabPanel value={activeTab} index={1}>
           {renderFileList(models, 'models', true, true)}
         </TabPanel>
-        
+
         <TabPanel value={activeTab} index={2}>
           {renderFileList(checkpoints, 'checkpoints', false, true)}
         </TabPanel>
-        
+
         <TabPanel value={activeTab} index={3}>
           {renderFileList(artifacts, 'artifacts', false, true)}
         </TabPanel>
-        
+
         <TabPanel value={activeTab} index={4}>
           {renderFileList(jobFiles, 'jobs', false, true)}
         </TabPanel>

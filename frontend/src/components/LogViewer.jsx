@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Typography, Paper, Chip, Alert } from '@mui/material';
+import { monoFontFamily } from '../theme/typography';
 
 const LogViewer = ({ jobId }) => {
   const [logs, setLogs] = useState([]);
@@ -191,7 +192,6 @@ const LogViewer = ({ jobId }) => {
             label={isConnected ? 'Connected' : 'Disconnected'}
             size="small"
             color={isConnected ? 'success' : 'default'}
-            sx={{ height: 20 }}
           />
         )}
       </Box>
@@ -204,32 +204,38 @@ const LogViewer = ({ jobId }) => {
       
       <Paper
         ref={logContainerRef}
-        sx={{
+        variant="outlined"
+        sx={(theme) => ({
           height: 300,
           overflow: 'auto',
           p: 2,
-          bgcolor: '#1e1e1e',
-          color: '#d4d4d4',
-          fontFamily: 'monospace',
-          fontSize: '0.875rem',
+          backgroundColor:
+            theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[900],
+          color: theme.palette.grey[300],
+          fontFamily: monoFontFamily,
+          fontSize: '0.8125rem',
           lineHeight: 1.6,
-        }}
+        })}
       >
         {logs.length > 0 ? (
           logs.map((log, index) => (
-            <div 
+            <Box
               key={index}
-              style={{
-                color: log.includes('ERROR') ? '#f48771' : 
-                       log.includes('WARN') ? '#d7ba7d' :
-                       log.includes('INFO') ? '#4ec9b0' : '#d4d4d4'
-              }}
+              sx={(theme) => ({
+                color: log.includes('ERROR')
+                  ? theme.palette.error.light
+                  : log.includes('WARN')
+                    ? theme.palette.warning.light
+                    : log.includes('INFO')
+                      ? theme.palette.success.light
+                      : theme.palette.grey[300],
+              })}
             >
               {log}
-            </div>
+            </Box>
           ))
         ) : (
-          <Typography color="textSecondary" sx={{ color: '#858585' }}>
+          <Typography variant="body2" sx={(theme) => ({ color: theme.palette.grey[500] })}>
             {jobId ? (error ? 'Unable to load logs' : 'Waiting for logs...') : 'No job selected.'}
           </Typography>
         )}

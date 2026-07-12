@@ -1,6 +1,7 @@
 import React from 'react';
 import { Alert, Box, Typography, Button } from '@mui/material';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { monoFontFamily } from '../theme/typography';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -47,7 +48,7 @@ class ErrorBoundary extends React.Component {
                 {this.state.error?.message || 'An unexpected error occurred while rendering this component.'}
               </Typography>
               {process.env.NODE_ENV === 'development' && (
-                <details style={{ whiteSpace: 'pre-wrap', marginTop: 8, fontSize: '0.8rem' }}>
+                <details style={{ whiteSpace: 'pre-wrap', marginTop: 8, fontSize: '0.8rem', fontFamily: monoFontFamily }}>
                   {this.state.error && this.state.error.toString()}
                   <br />
                   {this.state.errorInfo.componentStack}

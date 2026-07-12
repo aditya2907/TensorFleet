@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from prometheus_client import Counter, Gauge, Histogram, generate_latest, REGISTRY
 import os
@@ -7,7 +7,6 @@ import random
 import time
 import subprocess
 import threading
-import docker
 
 app = Flask(__name__)
 
@@ -77,16 +76,7 @@ def get_job_metrics():
 def get_job_metrics_detail(job_id):
     """Get detailed metrics for a specific job"""
     if job_id not in jobs_data:
-        # Auto-register job with default values instead of returning 404
-        jobs_data[job_id] = {
-            'job_id': job_id,
-            'status': 'UNKNOWN',
-            'start_time': time.time(),
-            'progress': {'percentage': 0, 'current_epoch': 0, 'total_epochs': 10},
-            'metrics': {'loss': 0.0, 'accuracy': 0.0},
-            'logs': []
-        }
-        logger.info(f"Auto-registered job {job_id} with default values")
+        return jsonify({'error': 'Job not found', 'job_id': job_id}), 404
 
     job = jobs_data[job_id]
     return jsonify(job), 200
@@ -142,8 +132,6 @@ def get_worker_metrics():
 @app.route('/api/v1/metrics/workers/<worker_id>', methods=['POST'])
 def update_worker_metrics(worker_id):
     """Update metrics for a specific worker"""
-    from flask import request
-    
     data = request.get_json()
     
     if worker_id not in workers_data:
@@ -213,22 +201,6 @@ def get_worker_activity():
             'is_active': is_active
         })
     
-    # Add mock workers if none exist for demonstration
-    if not workers_list:
-        for i in range(1, 4):
-            workers_list.append({
-                'worker_id': f'tensorfleet-worker-{i}',
-                'status': 'IDLE' if i > 1 else 'BUSY',
-                'current_task_id': f'task_{int(current_time)}_{i}' if i == 1 else '',
-                'current_job_id': 'demo_job' if i == 1 else '',
-                'tasks_completed': i * 5,
-                'last_activity_time': current_time - (i * 2),
-                'cpu_usage': 20 + (i * 15),
-                'memory_usage': 30 + (i * 10),
-                'uptime': 3600 + (i * 300),
-                'is_active': True
-            })
-    
     return jsonify({
         'workers': workers_list,
         'total_workers': len(workers_list),
@@ -257,9 +229,12 @@ def update_scaling_config():
 @app.route('/api/v1/scaling/workers', methods=['POST'])
 def scale_workers():
     """Scale workers to a specific count"""
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     target_count = data.get('worker_count', scaling_config['desired_workers'])
-    
+    return scale_workers_internal(target_count)
+
+def scale_workers_internal(target_count):
+    """Scale workers to target_count. Returns a (response, status) tuple."""
     # Validate worker count
     if target_count < scaling_config['min_workers']:
         return jsonify({'error': f'Worker count must be at least {scaling_config["min_workers"]}'}), 400
@@ -327,22 +302,26 @@ def scale_down_workers():
     target_count = max(scaling_config['desired_workers'] - 1, scaling_config['min_workers'])
     return scale_workers_internal(target_count)
 
-def scale_workers_internal(target_count):
-    """Internal function to scale workers"""
-    from flask import jsonify
-    return scale_workers(), 200 if scale_workers().status_code == 200 else scale_workers().status_code
+# Guard so only ONE auto-shrink monitor thread ever runs, regardless of how
+# many times the enable endpoint is called.
+_auto_shrink_lock = threading.Lock()
+_auto_shrink_thread = None
 
 @app.route('/api/v1/scaling/auto-shrink', methods=['POST'])
 def enable_auto_shrink():
     """Enable automatic shrinking of workers when jobs complete"""
-    data = request.get_json() or {}
+    global _auto_shrink_thread
+    data = request.get_json(silent=True) or {}
     enabled = data.get('enabled', True)
-    
+
     scaling_config['auto_scale_enabled'] = enabled
-    
+
     if enabled:
-        # Start auto-shrink monitoring thread
-        threading.Thread(target=monitor_and_shrink, daemon=True).start()
+        # Start auto-shrink monitoring thread (at most one)
+        with _auto_shrink_lock:
+            if _auto_shrink_thread is None or not _auto_shrink_thread.is_alive():
+                _auto_shrink_thread = threading.Thread(target=monitor_and_shrink, daemon=True)
+                _auto_shrink_thread.start()
         return jsonify({'message': 'Auto-shrink enabled', 'config': scaling_config}), 200
     else:
         return jsonify({'message': 'Auto-shrink disabled', 'config': scaling_config}), 200
@@ -397,8 +376,6 @@ def monitor_and_shrink():
 def simulate_metrics():
     """Simulate some metrics for demonstration"""
     # This would be removed in production
-    import threading
-    
     def update_metrics():
         while True:
             # Simulate random active jobs and workers
@@ -412,21 +389,9 @@ def simulate_metrics():
 @app.route('/api/v1/jobs/<job_id>/logs', methods=['GET'])
 def get_job_logs(job_id):
     """Get or stream logs for a specific job (fallback endpoint)"""
-    from flask import Response
-    import time
-    
-    # Check if job exists in our data
+    # Unknown jobs are not auto-registered with fake data
     if job_id not in jobs_data:
-        # Auto-register job with default values
-        jobs_data[job_id] = {
-            'job_id': job_id,
-            'status': 'UNKNOWN',
-            'start_time': time.time(),
-            'progress': {'percentage': 0, 'current_epoch': 0, 'total_epochs': 10},
-            'metrics': {'loss': 0.0, 'accuracy': 0.0},
-            'logs': []
-        }
-        logger.info(f"Auto-registered job {job_id} for log access")
+        return jsonify({'error': 'Job not found', 'job_id': job_id}), 404
 
     job = jobs_data[job_id]
     
